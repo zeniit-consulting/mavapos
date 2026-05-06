@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import { useRouter } from "next/navigation";
 import {
   BadgePercent,
   BarChart3,
@@ -136,7 +137,7 @@ type NewPasswordForm = {
   confirmPassword: string;
 };
 
-type MenuLabel = "Kasir" | "Laporan" | "Produk & Stok" | "Promo" | "Staf" | "Paket SaaS" | "Pengaturan";
+export type MenuLabel = "Kasir" | "Laporan" | "Produk & Stok" | "Promo" | "Staf" | "Paket SaaS" | "Pengaturan";
 
 const initialProducts: Product[] = [
   {
@@ -318,6 +319,16 @@ const menu = [
   { label: "Pengaturan", icon: Settings },
 ] satisfies { label: MenuLabel; icon: typeof ShoppingCart }[];
 
+const menuRoutes: Record<MenuLabel, string> = {
+  Kasir: "/kasir",
+  Laporan: "/laporan",
+  "Produk & Stok": "/produk",
+  Promo: "/promo",
+  Staf: "/staf",
+  "Paket SaaS": "/paket",
+  Pengaturan: "/pengaturan",
+};
+
 const demoUsers = [
   {
     email: "owner@mavapos.id",
@@ -404,7 +415,12 @@ function SplashScreen() {
   );
 }
 
-export default function Home() {
+export default function MavaposShell({
+  initialMenu = "Kasir",
+}: {
+  initialMenu?: MenuLabel;
+}) {
+  const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
   const [showSplash, setShowSplash] = useState(true);
   const [authReady, setAuthReady] = useState(false);
@@ -435,7 +451,7 @@ export default function Home() {
   const [categories, setCategories] = useState(initialCategories);
   const [promos, setPromos] = useState<Promo[]>(initialPromos);
   const [staffMembers, setStaffMembers] = useState<StaffMember[]>(initialStaffMembers);
-  const [activeMenu, setActiveMenu] = useState<MenuLabel>("Kasir");
+  const [activeMenu, setActiveMenu] = useState<MenuLabel>(initialMenu);
   const [cart, setCart] = useState<CartItem[]>([
     { ...initialProducts[0], qty: 1 },
     { ...initialProducts[1], qty: 2 },
