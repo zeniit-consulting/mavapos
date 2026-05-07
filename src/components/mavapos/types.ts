@@ -1,0 +1,143 @@
+export type Product = {
+  id: number;
+  name: string;
+  category: string;
+  price: number;
+  stock: number;
+  tag: string;
+  image: string;
+};
+
+export type CartItem = Product & {
+  qty: number;
+};
+
+export type ProductForm = Omit<Product, "id">;
+
+export type CategoryForm = {
+  name: string;
+};
+
+export type Ingredient = {
+  id: number;
+  name: string;
+  unit: string;
+  stock: number;
+  minStock: number;
+  costPerUnit: number;
+  usedFor: string[];
+};
+
+export type IngredientForm = {
+  name: string;
+  unit: string;
+  stock: number;
+  minStock: number;
+  costPerUnit: number;
+  usedFor: string;
+};
+
+export type ProductRecipe = {
+  productId: number;
+  ingredientId: number;
+  qty: number;
+};
+
+export type Promo = {
+  id: number;
+  name: string;
+  code: string;
+  type: string;
+  target: string;
+  value: string;
+  period: string;
+  status: "Aktif" | "Draft";
+};
+
+export type PromoForm = Omit<Promo, "id">;
+
+export type StaffMember = {
+  id: number;
+  name: string;
+  role: "Kasir";
+  phone: string;
+  shift: "Pagi" | "Sore";
+  status: "Aktif" | "Nonaktif";
+};
+
+export type StaffForm = Omit<StaffMember, "id">;
+
+export type PaymentMethod = "Tunai" | "QRIS";
+
+export type Expense = {
+  id: number;
+  title: string;
+  category: string;
+  amount: number;
+  date: string;
+  paymentMethod: "Tunai" | "Transfer" | "QRIS" | "Kas outlet";
+  note: string;
+  status: "Tercatat" | "Draft";
+};
+
+export type ExpenseForm = Omit<Expense, "id">;
+
+export type StockMovementType =
+  | "Penjualan"
+  | "Stok masuk"
+  | "Penyesuaian"
+  | "Stok opname";
+
+export type StockMovement = {
+  id: number;
+  productId: number;
+  productName: string;
+  category: string;
+  type: StockMovementType;
+  qtyChange: number;
+  previousStock: number;
+  nextStock: number;
+  note: string;
+  createdAt: string;
+};
+
+export type AuthRole = "Owner" | "Kasir";
+
+export type AuthUser = {
+  name: string;
+  email: string;
+  role: AuthRole;
+  outlet: string;
+};
+
+export type LoginForm = {
+  email: string;
+  password: string;
+};
+
+export type AuthMode = "login" | "register" | "forgot" | "update-password";
+
+export type RegisterForm = {
+  name: string;
+  email: string;
+  password: string;
+  outlet: string;
+  businessType: "FnB" | "Retail";
+  whatsapp: string;
+};
+
+export type NewPasswordForm = {
+  password: string;
+  confirmPassword: string;
+};
+
+export type MenuLabel =
+  | "Dashboard"
+  | "Kasir"
+  | "Laporan"
+  | "Produk & Stok"
+  | "Bahan"
+  | "Pengeluaran"
+  | "Promo"
+  | "Staf"
+  | "Pengaturan";

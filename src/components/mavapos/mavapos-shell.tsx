@@ -4,31 +4,30 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import {
   BadgePercent,
-  BarChart3,
   Boxes,
   CalendarDays,
   Check,
   ChevronRight,
   CreditCard,
+  Sparkles,
+  X,
   Edit3,
   HomeIcon,
+  LogOut,
   Minus,
   Package,
   Plus,
   ReceiptText,
   Search,
-  Settings,
   ShieldCheck,
   ShoppingCart,
-  Sparkles,
   Store,
   Trash2,
   UserPlus,
   UserRound,
-  Users,
   Utensils,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -61,357 +60,264 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { createClient } from "@/lib/supabase/client";
+import { mapSupabaseUser } from "./auth";
+import { LoginLogo, MavaLogo, SplashScreen } from "./brand";
+import {
+  defaultProductImage,
+  demoUsers,
+  initialExpenses,
+  initialCategories,
+  initialIngredients,
+  initialProducts,
+  initialPromos,
+  initialRecipes,
+  initialStaffMembers,
+  menu,
+  menuRoutes,
+  promoSlides,
+  saasPlans,
+} from "./data";
+import { formatCurrency } from "./format";
+import type {
+  AuthMode,
+  AuthUser,
+  CartItem,
+  CategoryForm,
+  Expense,
+  ExpenseForm,
+  Ingredient,
+  IngredientForm,
+  LoginForm,
+  MenuLabel,
+  NewPasswordForm,
+  PaymentMethod,
+  Product,
+  ProductForm,
+  ProductRecipe,
+  Promo,
+  PromoForm,
+  RegisterForm,
+  StockMovement,
+  StockMovementType,
+  StaffForm,
+  StaffMember,
+} from "./types";
 
-type Product = {
-  id: number;
-  name: string;
-  category: string;
-  price: number;
-  stock: number;
-  tag: string;
-  image: string;
-};
-
-type CartItem = Product & {
-  qty: number;
-};
-
-type ProductForm = Omit<Product, "id">;
-
-type CategoryForm = {
-  name: string;
-};
-
-type Promo = {
-  id: number;
-  name: string;
-  type: string;
-  target: string;
-  value: string;
-  period: string;
-  status: "Aktif" | "Draft";
-};
-
-type PromoForm = Omit<Promo, "id">;
-
-type StaffMember = {
-  id: number;
-  name: string;
-  role: "Kasir";
-  phone: string;
-  shift: "Pagi" | "Sore";
-  status: "Aktif" | "Nonaktif";
-};
-
-type StaffForm = Omit<StaffMember, "id">;
-
-type PaymentMethod = "Tunai" | "QRIS";
-
-type AuthRole = "Owner" | "Kasir";
-
-type AuthUser = {
-  name: string;
-  email: string;
-  role: AuthRole;
-  outlet: string;
-};
-
-type LoginForm = {
-  email: string;
-  password: string;
-};
-
-type AuthMode = "login" | "register" | "forgot" | "update-password";
-
-type RegisterForm = {
-  name: string;
-  email: string;
-  password: string;
-  outlet: string;
-  businessType: "FnB" | "Retail";
-  whatsapp: string;
-};
-
-type NewPasswordForm = {
-  password: string;
-  confirmPassword: string;
-};
-
-export type MenuLabel = "Kasir" | "Laporan" | "Produk & Stok" | "Promo" | "Staf" | "Paket SaaS" | "Pengaturan";
-
-const initialProducts: Product[] = [
-  {
-    id: 1,
-    name: "Nasi Ayam Geprek",
-    category: "FnB",
-    price: 18000,
-    stock: 18,
-    tag: "Terlaris",
-    image:
-      "https://images.unsplash.com/photo-1562967916-eb82221dfb92?auto=format&fit=crop&w=600&q=80",
-  },
-  {
-    id: 2,
-    name: "Es Kopi Susu",
-    category: "FnB",
-    price: 16000,
-    stock: 24,
-    tag: "Promo",
-    image:
-      "https://images.unsplash.com/photo-1461023058943-07fcbe16d735?auto=format&fit=crop&w=600&q=80",
-  },
-  {
-    id: 3,
-    name: "Mie Goreng Spesial",
-    category: "FnB",
-    price: 22000,
-    stock: 11,
-    tag: "Dapur",
-    image:
-      "https://images.unsplash.com/photo-1612929633738-8fe44f7ec841?auto=format&fit=crop&w=600&q=80",
-  },
-  {
-    id: 4,
-    name: "Roti Cokelat",
-    category: "Retail",
-    price: 8500,
-    stock: 6,
-    tag: "Stok tipis",
-    image:
-      "https://images.unsplash.com/photo-1509440159596-0249088772ff?auto=format&fit=crop&w=600&q=80",
-  },
-  {
-    id: 5,
-    name: "Air Mineral 600ml",
-    category: "Retail",
-    price: 5000,
-    stock: 42,
-    tag: "Cepat",
-    image:
-      "https://images.unsplash.com/photo-1523362628745-0c100150b504?auto=format&fit=crop&w=600&q=80",
-  },
-  {
-    id: 6,
-    name: "Snack Kentang",
-    category: "Retail",
-    price: 12000,
-    stock: 15,
-    tag: "Barcode",
-    image:
-      "https://images.unsplash.com/photo-1566478989037-eec170784d0b?auto=format&fit=crop&w=600&q=80",
-  },
-];
-
-const initialCategories = ["FnB", "Retail"];
-
-const defaultProductImage =
-  "https://images.unsplash.com/photo-1543353071-873f17a7a088?auto=format&fit=crop&w=600&q=80";
-
-const promoSlides = [
-  {
-    title: "Diskon kopi sore",
-    description: "Diskon Rp6.000 untuk Es Kopi Susu setiap pukul 15.00-18.00.",
-    cta: "Berlaku hari ini",
-    image:
-      "https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?auto=format&fit=crop&w=1200&q=80",
-  },
-  {
-    title: "Member loyalty",
-    description: "Pelanggan mendapat 1 poin setiap belanja Rp10.000.",
-    cta: "Paket Basic",
-    image:
-      "https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?auto=format&fit=crop&w=1200&q=80",
-  },
-  {
-    title: "Bundle menu cepat",
-    description: "Paket makan + minum untuk menaikkan rata-rata nilai transaksi.",
-    cta: "Siap dicoba",
-    image:
-      "https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&w=1200&q=80",
-  },
-];
-
-const initialPromos: Promo[] = [
-  {
-    id: 1,
-    name: "Diskon kopi sore",
-    type: "Diskon nominal",
-    target: "Es Kopi Susu",
-    value: "Rp6.000",
-    period: "15.00-18.00",
-    status: "Aktif",
-  },
-  {
-    id: 2,
-    name: "Member loyalty",
-    type: "Loyalty poin",
-    target: "Semua produk",
-    value: "1 poin / Rp10.000",
-    period: "Setiap hari",
-    status: "Aktif",
-  },
-  {
-    id: 3,
-    name: "Bundle menu cepat",
-    type: "Bundle",
-    target: "Makanan + Minuman",
-    value: "Harga paket",
-    period: "Draft kampanye",
-    status: "Draft",
-  },
-];
-
-const initialStaffMembers: StaffMember[] = [
-  {
-    id: 1,
-    name: "Ayu Lestari",
-    role: "Kasir",
-    phone: "0812-3456-7788",
-    shift: "Pagi",
-    status: "Aktif",
-  },
-  {
-    id: 2,
-    name: "Rafi Pratama",
-    role: "Kasir",
-    phone: "0812-8899-1100",
-    shift: "Sore",
-    status: "Aktif",
-  },
-];
-
-const saasPlans = [
-  {
-    name: "Core",
-    price: "Rp169.000",
-    status: "Aktif",
-    description: "Paket kasir ringan untuk outlet yang baru mulai digital.",
-    features: [
-      "Hingga 30 produk",
-      "Transaksi unlimited",
-      "Laporan harian & bulanan",
-      "Struk digital via WhatsApp",
-      "Hingga 2 staf kasir",
-    ],
-  },
-  {
-    name: "Basic",
-    price: "Rp349.000",
-    status: "Upgrade",
-    description: "Untuk outlet yang butuh laporan margin dan loyalty member.",
-    features: [
-      "Laporan HPP & profit margin",
-      "Export PDF",
-      "Member & loyalty poin",
-      "Struk digital tanpa branding Mava",
-      "Campaign promo lebih lengkap",
-    ],
-  },
-];
-
-const menu = [
-  { label: "Kasir", icon: ShoppingCart },
-  { label: "Laporan", icon: BarChart3 },
-  { label: "Produk & Stok", icon: Boxes },
-  { label: "Promo", icon: BadgePercent },
-  { label: "Staf", icon: Users },
-  { label: "Paket SaaS", icon: Sparkles },
-  { label: "Pengaturan", icon: Settings },
-] satisfies { label: MenuLabel; icon: typeof ShoppingCart }[];
-
-const menuRoutes: Record<MenuLabel, string> = {
-  Kasir: "/kasir",
-  Laporan: "/laporan",
-  "Produk & Stok": "/produk",
-  Promo: "/promo",
-  Staf: "/staf",
-  "Paket SaaS": "/paket",
-  Pengaturan: "/pengaturan",
-};
-
-const demoUsers = [
-  {
-    email: "owner@mavapos.id",
-    password: "mava12345",
-    user: {
-      name: "Ayu Owner",
-      email: "owner@mavapos.id",
-      role: "Owner",
-      outlet: "Outlet Mava Demo",
-    },
-  },
-  {
-    email: "kasir@mavapos.id",
-    password: "mava12345",
-    user: {
-      name: "Ayu Kasir",
-      email: "kasir@mavapos.id",
-      role: "Kasir",
-      outlet: "Outlet Mava Demo",
-    },
-  },
-] satisfies { email: string; password: string; user: AuthUser }[];
-
-function mapSupabaseUser(user: {
-  email?: string;
-  user_metadata?: {
-    full_name?: string;
-    name?: string;
-    role?: string;
-    outlet?: string;
-  };
-}): AuthUser {
-  const role = user.user_metadata?.role === "Kasir" ? "Kasir" : "Owner";
-  const email = user.email ?? "";
-
-  return {
-    name: user.user_metadata?.full_name ?? user.user_metadata?.name ?? email.split("@")[0] ?? "User",
-    email,
-    role,
-    outlet: user.user_metadata?.outlet ?? "Outlet Mava Demo",
-  };
+function normalizePromoCode(value: string) {
+  return value.replace(/[^a-z0-9]/gi, "").toUpperCase();
 }
 
-function formatCurrency(value: number) {
-  return new Intl.NumberFormat("id-ID", {
-    style: "currency",
-    currency: "IDR",
-    maximumFractionDigits: 0,
-  }).format(value);
+function isDefaultProductImage(image: string) {
+  return !image || image === defaultProductImage;
 }
 
-function MavaLogo({ className = "" }: { className?: string }) {
+function formatStockTimestamp(date = new Date()) {
+  return new Intl.DateTimeFormat("id-ID", {
+    day: "2-digit",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
+}
+
+function getStoredInventory() {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  const storedInventory = window.localStorage.getItem("mavapos.inventory");
+
+  if (!storedInventory) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(storedInventory) as {
+      products?: Product[];
+      categories?: string[];
+      stockMovements?: StockMovement[];
+    };
+  } catch {
+    window.localStorage.removeItem("mavapos.inventory");
+    return null;
+  }
+}
+
+function getStoredOperations() {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  const storedOperations = window.localStorage.getItem("mavapos.operations");
+
+  if (!storedOperations) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(storedOperations) as {
+      ingredients?: Ingredient[];
+      expenses?: Expense[];
+      recipes?: ProductRecipe[];
+    };
+  } catch {
+    window.localStorage.removeItem("mavapos.operations");
+    return null;
+  }
+}
+
+function isTransactionDiscountPromo(promo: Promo) {
+  return promo.type.toLowerCase().includes("diskon") || promo.value.includes("%") || /rp/i.test(promo.value);
+}
+
+function getPromoDiscount(promo: Promo | undefined, subtotal: number) {
+  if (!promo || subtotal <= 0) {
+    return 0;
+  }
+
+  if (!isTransactionDiscountPromo(promo)) {
+    return 0;
+  }
+
+  if (promo.value.includes("%")) {
+    const percent = Number(promo.value.replace(/[^0-9]/g, ""));
+    return Math.min(subtotal, Math.round((subtotal * percent) / 100));
+  }
+
+  const nominal = Number(promo.value.replace(/[^0-9]/g, ""));
+  return Math.min(subtotal, Number.isFinite(nominal) ? nominal : 0);
+}
+
+function getMenuLabelFromPathname(pathname: string): MenuLabel | null {
+  const matchedEntry = Object.entries(menuRoutes).find(([, route]) => route === pathname);
+  return matchedEntry ? (matchedEntry[0] as MenuLabel) : null;
+}
+
+type ToastVariant = "success" | "error" | "info";
+
+type ToastMessage = {
+  id: number;
+  title: string;
+  description?: string;
+  variant: ToastVariant;
+};
+
+type TablePaginationProps = {
+  currentPage: number;
+  totalPages: number;
+  totalItems: number;
+  label: string;
+  onPageChange: (page: number) => void;
+};
+
+function ToastViewport({
+  toasts,
+  onDismiss,
+}: {
+  toasts: ToastMessage[];
+  onDismiss: (id: number) => void;
+}) {
+  if (toasts.length === 0) {
+    return null;
+  }
+
   return (
-    <Image
-      src="/2.png"
-      alt="MAVA"
-      width={120}
-      height={48}
-      className={`block object-contain ${className}`}
-      draggable={false}
-    />
+    <div className="fixed right-4 top-4 z-[80] grid w-[min(360px,calc(100vw-32px))] gap-2">
+      {toasts.map((toast) => (
+        <div
+          key={toast.id}
+          className={`rounded-lg border bg-white p-3 shadow-lg ${
+            toast.variant === "success"
+              ? "border-[#b9e2c5]"
+              : toast.variant === "error"
+                ? "border-[#f1b6b6]"
+                : "border-[#bfdbfe]"
+          }`}
+          role="status"
+        >
+          <div className="flex items-start gap-3">
+            <div
+              className={`mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-md ${
+                toast.variant === "success"
+                  ? "bg-[#dcfce7] text-[#166534]"
+                  : toast.variant === "error"
+                    ? "bg-[#fee2e2] text-[#b42318]"
+                    : "bg-[#e0f2fe] text-[#075985]"
+              }`}
+            >
+              {toast.variant === "error" ? <X size={14} /> : <Check size={14} />}
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold text-[#1f2623]">{toast.title}</p>
+              {toast.description && (
+                <p className="mt-1 text-xs leading-5 text-[#69756f]">{toast.description}</p>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() => onDismiss(toast.id)}
+              className="flex size-6 !min-h-0 shrink-0 items-center justify-center rounded-md text-[#69756f] hover:bg-[#f3f6f1]"
+              aria-label="Tutup notifikasi"
+            >
+              <X size={14} />
+            </button>
+          </div>
+        </div>
+      ))}
+    </div>
   );
 }
 
-function LoginLogo({ className = "" }: { className?: string }) {
-  return (
-    <Image
-      src="/3.png"
-      alt="MAVA"
-      width={160}
-      height={64}
-      className={`block object-contain ${className}`}
-      priority
-      draggable={false}
-    />
-  );
-}
+function TablePagination({
+  currentPage,
+  totalPages,
+  totalItems,
+  label,
+  onPageChange,
+}: TablePaginationProps) {
+  if (totalItems === 0) {
+    return null;
+  }
 
-function SplashScreen() {
   return (
-    <main className="flex min-h-screen items-center justify-center bg-[#0369a1] px-8">
-      <LoginLogo className="h-auto w-[min(68vw,360px)]" />
-    </main>
+    <div className="flex flex-col gap-3 border-t border-[#dde3da] px-4 py-3 md:flex-row md:items-center md:justify-between">
+      <p className="text-sm text-[#69756f]">
+        {label} · halaman {currentPage} dari {totalPages}
+      </p>
+      <div className="flex items-center gap-2">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => onPageChange(Math.max(1, currentPage - 1))}
+          disabled={currentPage === 1}
+        >
+          Sebelumnya
+        </Button>
+        <div className="flex items-center gap-1">
+          {Array.from({ length: totalPages }, (_, index) => index + 1).map((page) => (
+            <button
+              key={page}
+              onClick={() => onPageChange(page)}
+              className={`flex size-8 items-center justify-center rounded-lg border text-sm font-semibold ${
+                page === currentPage
+                  ? "border-[#0369a1] bg-[#e0f2fe] text-[#075985]"
+                  : "border-[#d7dfd4] bg-white text-[#4d5953]"
+              }`}
+            >
+              {page}
+            </button>
+          ))}
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => onPageChange(Math.min(totalPages, currentPage + 1))}
+          disabled={currentPage === totalPages}
+        >
+          Berikutnya
+        </Button>
+      </div>
+    </div>
   );
 }
 
@@ -447,33 +353,82 @@ export default function MavaposShell({
 	  const [authError, setAuthError] = useState("");
 	  const [authNotice, setAuthNotice] = useState("");
 	  const [authSubmitting, setAuthSubmitting] = useState(false);
-  const [products, setProducts] = useState<Product[]>(initialProducts);
-  const [categories, setCategories] = useState(initialCategories);
+  const [products, setProducts] = useState<Product[]>(
+    () => getStoredInventory()?.products ?? initialProducts,
+  );
+  const [categories, setCategories] = useState(
+    () => getStoredInventory()?.categories ?? initialCategories,
+  );
+  const [ingredients, setIngredients] = useState<Ingredient[]>(
+    () => getStoredOperations()?.ingredients ?? initialIngredients,
+  );
+  const [expenses, setExpenses] = useState<Expense[]>(
+    () => getStoredOperations()?.expenses ?? initialExpenses,
+  );
+  const [recipes] = useState<ProductRecipe[]>(
+    () => getStoredOperations()?.recipes ?? initialRecipes,
+  );
   const [promos, setPromos] = useState<Promo[]>(initialPromos);
   const [staffMembers, setStaffMembers] = useState<StaffMember[]>(initialStaffMembers);
   const [activeMenu, setActiveMenu] = useState<MenuLabel>(initialMenu);
+  const [stockView, setStockView] = useState<"products" | "movements" | "opname">("products");
   const [cart, setCart] = useState<CartItem[]>([
     { ...initialProducts[0], qty: 1 },
     { ...initialProducts[1], qty: 2 },
   ]);
   const [category, setCategory] = useState("Semua");
   const [promoIndex, setPromoIndex] = useState(0);
+  const [promoCodeInput, setPromoCodeInput] = useState("");
+  const [appliedPromoId, setAppliedPromoId] = useState<number | null>(null);
+  const [promoCodeError, setPromoCodeError] = useState("");
   const [productQuery, setProductQuery] = useState("");
+  const [ingredientQuery, setIngredientQuery] = useState("");
+  const [expenseQuery, setExpenseQuery] = useState("");
+  const [ingredientPage, setIngredientPage] = useState(1);
+  const [expensePage, setExpensePage] = useState(1);
   const [productModal, setProductModal] = useState<"create" | "edit" | null>(null);
   const [categoryModal, setCategoryModal] = useState(false);
+  const [ingredientModal, setIngredientModal] = useState<"create" | "edit" | null>(null);
   const [promoModal, setPromoModal] = useState<"create" | "edit" | null>(null);
   const [staffModal, setStaffModal] = useState<"create" | "edit" | null>(null);
+  const [expenseModal, setExpenseModal] = useState<"create" | "edit" | null>(null);
   const [paymentModal, setPaymentModal] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("Tunai");
   const [cashReceived, setCashReceived] = useState(50000);
   const [paymentStep, setPaymentStep] = useState<"form" | "success">("form");
   const [editingProductId, setEditingProductId] = useState<number | null>(null);
+  const [editingIngredientId, setEditingIngredientId] = useState<number | null>(null);
   const [editingPromoId, setEditingPromoId] = useState<number | null>(null);
   const [editingStaffId, setEditingStaffId] = useState<number | null>(null);
+  const [editingExpenseId, setEditingExpenseId] = useState<number | null>(null);
   const [deleteProduct, setDeleteProduct] = useState<Product | null>(null);
+  const [deleteIngredient, setDeleteIngredient] = useState<Ingredient | null>(null);
   const [deletePromo, setDeletePromo] = useState<Promo | null>(null);
   const [deleteStaff, setDeleteStaff] = useState<StaffMember | null>(null);
+  const [deleteExpense, setDeleteExpense] = useState<Expense | null>(null);
   const [isPageLoading, setIsPageLoading] = useState(false);
+  const [toasts, setToasts] = useState<ToastMessage[]>([]);
+  const nextToastIdRef = useRef(0);
+  const [stockMovements, setStockMovements] = useState<StockMovement[]>(
+    () => getStoredInventory()?.stockMovements ?? [],
+  );
+  const nextStockMovementIdRef = useRef(
+    Math.max(0, ...stockMovements.map((movement) => movement.id)),
+  );
+  const [stockAdjustmentForm, setStockAdjustmentForm] = useState<{
+    productId: string;
+    type: Exclude<StockMovementType, "Penjualan" | "Stok opname">;
+    qty: number;
+    note: string;
+  }>({
+    productId: "",
+    type: "Stok masuk",
+    qty: 0,
+    note: "",
+  });
+  const [opnameInputs, setOpnameInputs] = useState<
+    Record<string, { actualStock: string; note: string }>
+  >({});
   const [productForm, setProductForm] = useState<ProductForm>({
     name: "",
     category: "FnB",
@@ -483,8 +438,17 @@ export default function MavaposShell({
     image: defaultProductImage,
   });
   const [categoryForm, setCategoryForm] = useState<CategoryForm>({ name: "" });
+  const [ingredientForm, setIngredientForm] = useState<IngredientForm>({
+    name: "",
+    unit: "kg",
+    stock: 0,
+    minStock: 0,
+    costPerUnit: 0,
+    usedFor: "",
+  });
   const [promoForm, setPromoForm] = useState<PromoForm>({
     name: "",
+    code: "",
     type: "Diskon nominal",
     target: "",
     value: "",
@@ -497,6 +461,15 @@ export default function MavaposShell({
     phone: "",
     shift: "Pagi",
     status: "Aktif",
+  });
+  const [expenseForm, setExpenseForm] = useState<ExpenseForm>({
+    title: "",
+    category: "Operasional",
+    amount: 0,
+    date: "2026-05-07",
+    paymentMethod: "Kas outlet",
+    note: "",
+    status: "Tercatat",
   });
 
   const filteredProducts = products.filter((product) => {
@@ -513,29 +486,259 @@ export default function MavaposShell({
       value.toLowerCase().includes(query),
     );
   });
+  const filteredIngredients = ingredients.filter((ingredient) => {
+    const query = ingredientQuery.trim().toLowerCase();
+
+    if (!query) {
+      return true;
+    }
+
+    return [ingredient.name, ingredient.unit].some((value) =>
+      value.toLowerCase().includes(query),
+    );
+  });
+  const filteredExpenses = expenses.filter((expense) => {
+    const query = expenseQuery.trim().toLowerCase();
+
+    if (!query) {
+      return true;
+    }
+
+    return [expense.title, expense.category, expense.paymentMethod, expense.note].some((value) =>
+      value.toLowerCase().includes(query),
+    );
+  });
   const lowStockCount = products.filter((product) => product.stock <= 10).length;
-  const productUsage = Math.min((products.length / 30) * 100, 100);
+  const lowIngredientCount = ingredients.filter((ingredient) => ingredient.stock <= ingredient.minStock).length;
+  const activePromos = promos.filter((promo) => promo.status === "Aktif");
+  const transactionPromos = activePromos.filter(isTransactionDiscountPromo);
   const activePromoCount = promos.filter((promo) => promo.status === "Aktif").length;
   const activeStaffCount = staffMembers.filter((staff) => staff.status === "Aktif").length;
+  const currentPromoIndex =
+    activePromos.length > 0 ? Math.min(promoIndex, activePromos.length - 1) : 0;
+  const currentPromo = activePromos[currentPromoIndex];
+  const currentPromoImage = promoSlides[currentPromoIndex % promoSlides.length].image;
+  const appliedPromo = activePromos.find((promo) => promo.id === appliedPromoId);
+  const promoCodeHint = transactionPromos[0]?.code || "DISKONKOPISORE";
+  const currentPlan = saasPlans.find((plan) => plan.status === "Aktif")?.name ?? "Core";
+  const hasBasicAccess = currentPlan !== "Core";
+  const ingredientUsageMap = ingredients.reduce<Record<number, string[]>>((accumulator, ingredient) => {
+    accumulator[ingredient.id] = recipes
+      .filter((recipe) => recipe.ingredientId === ingredient.id)
+      .map((recipe) => products.find((product) => product.id === recipe.productId)?.name)
+      .filter((name): name is string => Boolean(name));
+    return accumulator;
+  }, {});
 
   const subtotal = useMemo(
     () => cart.reduce((total, item) => total + item.price * item.qty, 0),
     [cart],
   );
-  const discount = subtotal > 0 ? Math.min(6000, subtotal) : 0;
+  const discount = getPromoDiscount(appliedPromo, subtotal);
   const total = subtotal - discount;
   const cashChange = Math.max(cashReceived - total, 0);
   const isPaymentReady = total > 0 && (paymentMethod === "QRIS" || cashReceived >= total);
   const canManageOutlet = authUser?.role === "Owner";
+  const dashboardStats = [
+    {
+      label: "Penjualan hari ini",
+      value: formatCurrency(1425000),
+      note: "Naik 12% dari kemarin",
+    },
+    {
+      label: "Transaksi hari ini",
+      value: "38 transaksi",
+      note: `${formatCurrency(37500)} rata-rata per transaksi`,
+    },
+    {
+      label: "Produk terjual",
+      value: "96 item",
+      note: "FnB menyumbang 72% volume",
+    },
+    {
+      label: "SKU aktif",
+      value: `${products.filter((product) => product.stock > 0).length} produk`,
+      note: `${lowStockCount} produk butuh restock`,
+    },
+  ];
+  const salesChart = [
+    { day: "Sen", amount: 780000 },
+    { day: "Sel", amount: 920000 },
+    { day: "Rab", amount: 860000 },
+    { day: "Kam", amount: 1040000 },
+    { day: "Jum", amount: 1180000 },
+    { day: "Sab", amount: 1425000 },
+    { day: "Min", amount: 1280000 },
+  ];
+  const maxSalesAmount = Math.max(...salesChart.map((item) => item.amount));
+  const ingredientPageCount = Math.max(1, Math.ceil(filteredIngredients.length / 5));
+  const expensePageCount = Math.max(1, Math.ceil(filteredExpenses.length / 5));
+  const currentIngredientPage = Math.min(ingredientPage, ingredientPageCount);
+  const currentExpensePage = Math.min(expensePage, expensePageCount);
+  const paginatedIngredients = filteredIngredients.slice(
+    (currentIngredientPage - 1) * 5,
+    currentIngredientPage * 5,
+  );
+  const paginatedExpenses = filteredExpenses.slice(
+    (currentExpensePage - 1) * 5,
+    currentExpensePage * 5,
+  );
   const accessibleMenu = canManageOutlet
-    ? menu
-    : menu.filter((item) => item.label === "Kasir");
+    ? menu.filter((item) => hasBasicAccess || item.label !== "Bahan")
+    : menu.filter((item) => item.label === "Dashboard" || item.label === "Kasir");
+
+  function dismissToast(id: number) {
+    setToasts((items) => items.filter((toast) => toast.id !== id));
+  }
+
+  function showToast(variant: ToastVariant, title: string, description?: string) {
+    const id = nextToastIdRef.current + 1;
+    nextToastIdRef.current = id;
+
+    setToasts((items) => [...items.slice(-3), { id, title, description, variant }]);
+    window.setTimeout(() => dismissToast(id), 3600);
+  }
+
+  function logStockMovement(
+    product: Product,
+    type: StockMovementType,
+    qtyChange: number,
+    previousStock: number,
+    nextStock: number,
+    note: string,
+  ) {
+    const id = nextStockMovementIdRef.current + 1;
+    nextStockMovementIdRef.current = id;
+
+    setStockMovements((items) => [
+      {
+        id,
+        productId: product.id,
+        productName: product.name,
+        category: product.category,
+        type,
+        qtyChange,
+        previousStock,
+        nextStock,
+        note,
+        createdAt: formatStockTimestamp(),
+      },
+      ...items,
+    ]);
+  }
+
+  function applyStockChange(
+    productId: number,
+    qtyChange: number,
+    type: StockMovementType,
+    note: string,
+  ) {
+    const currentProduct = products.find((product) => product.id === productId);
+
+    if (!currentProduct) {
+      return false;
+    }
+
+    const nextStock = currentProduct.stock + qtyChange;
+
+    if (nextStock < 0) {
+      return false;
+    }
+
+    setProducts((items) =>
+      items.map((item) => (item.id === productId ? { ...item, stock: nextStock } : item)),
+    );
+    setCart((items) =>
+      items.map((item) => (item.id === productId ? { ...item, stock: nextStock } : item)),
+    );
+    logStockMovement(currentProduct, type, qtyChange, currentProduct.stock, nextStock, note);
+    return true;
+  }
+
+  function getRecipeRequirementsForCart(items: CartItem[]) {
+    const requirements = new Map<number, number>();
+
+    items.forEach((item) => {
+      recipes
+        .filter((recipe) => recipe.productId === item.id)
+        .forEach((recipe) => {
+          requirements.set(
+            recipe.ingredientId,
+            (requirements.get(recipe.ingredientId) ?? 0) + recipe.qty * item.qty,
+          );
+        });
+    });
+
+    return requirements;
+  }
+
+  function getInsufficientIngredientForCart(items: CartItem[]) {
+    const requirements = getRecipeRequirementsForCart(items);
+
+    for (const [ingredientId, qtyNeeded] of requirements.entries()) {
+      const ingredient = ingredients.find((item) => item.id === ingredientId);
+
+      if (!ingredient || ingredient.stock < qtyNeeded) {
+        return {
+          ingredient,
+          qtyNeeded,
+        };
+      }
+    }
+
+    return null;
+  }
 
   useEffect(() => {
-    const timer = window.setTimeout(() => setShowSplash(false), 1100);
+    window.localStorage.setItem(
+      "mavapos.inventory",
+      JSON.stringify({
+        products,
+        categories,
+        stockMovements,
+      }),
+    );
+  }, [products, categories, stockMovements]);
 
+  useEffect(() => {
+    window.localStorage.setItem(
+      "mavapos.operations",
+      JSON.stringify({
+        ingredients,
+        expenses,
+        recipes,
+      }),
+    );
+  }, [ingredients, expenses, recipes]);
+
+  useEffect(() => {
+    if (!authReady || authUser || !showSplash) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => setShowSplash(false), 1100);
     return () => window.clearTimeout(timer);
-  }, []);
+  }, [authReady, authUser, showSplash]);
+
+  useEffect(() => {
+    const syncMenuFromLocation = () => {
+      const nextMenu = getMenuLabelFromPathname(window.location.pathname);
+
+      if (nextMenu) {
+        if (nextMenu === "Bahan" && !hasBasicAccess) {
+          setActiveMenu("Pengaturan");
+          window.history.replaceState({}, "", menuRoutes.Pengaturan);
+          return;
+        }
+        setActiveMenu(nextMenu);
+      }
+    };
+
+    syncMenuFromLocation();
+    window.addEventListener("popstate", syncMenuFromLocation);
+
+    return () => window.removeEventListener("popstate", syncMenuFromLocation);
+  }, [hasBasicAccess]);
 
   useEffect(() => {
     let active = true;
@@ -548,6 +751,7 @@ export default function MavaposShell({
       if (data.session?.user) {
         setAuthUser(mapSupabaseUser(data.session.user));
         setAuthSource("supabase");
+        setShowSplash(false);
       } else {
         const storedSession = window.localStorage.getItem("mavapos.session");
 
@@ -555,6 +759,7 @@ export default function MavaposShell({
           try {
             setAuthUser(JSON.parse(storedSession) as AuthUser);
             setAuthSource("demo");
+            setShowSplash(false);
           } catch {
             window.localStorage.removeItem("mavapos.session");
           }
@@ -576,6 +781,7 @@ export default function MavaposShell({
 	      if (session?.user) {
 	        setAuthUser(mapSupabaseUser(session.user));
 	        setAuthSource("supabase");
+	        setShowSplash(false);
         window.localStorage.removeItem("mavapos.session");
       } else if (authSource === "supabase") {
         setAuthUser(null);
@@ -590,19 +796,26 @@ export default function MavaposShell({
   }, [authSource, supabase]);
 
   useEffect(() => {
-    if (activeMenu !== "Kasir") {
+    if (activeMenu !== "Kasir" || activePromos.length <= 1) {
       return;
     }
 
     const timer = window.setInterval(() => {
-      setPromoIndex((index) => (index + 1) % promoSlides.length);
+      setPromoIndex((index) => (index + 1) % activePromos.length);
     }, 4200);
 
     return () => window.clearInterval(timer);
-  }, [activeMenu]);
+  }, [activeMenu, activePromos.length]);
 
   function changeMenu(menuLabel: MenuLabel) {
-    if (!canManageOutlet && menuLabel !== "Kasir") {
+    if (!canManageOutlet && menuLabel !== "Kasir" && menuLabel !== "Dashboard") {
+      return;
+    }
+
+    if (menuLabel === "Bahan" && !hasBasicAccess) {
+      showToast("info", "Fitur Basic", "Kelola bahan hanya tersedia untuk paket Basic.");
+      setActiveMenu("Pengaturan");
+      window.history.pushState({}, "", menuRoutes.Pengaturan);
       return;
     }
 
@@ -612,14 +825,40 @@ export default function MavaposShell({
 
     setIsPageLoading(true);
     setActiveMenu(menuLabel);
+    window.history.pushState({}, "", menuRoutes[menuLabel]);
     window.setTimeout(() => setIsPageLoading(false), 520);
   }
 
   function addToCart(product: Product) {
+    if (product.stock <= 0) {
+      showToast("error", "Stok habis", `${product.name} tidak bisa ditambahkan karena stok kosong.`);
+      return;
+    }
+
+    const currentItem = cart.find((item) => item.id === product.id);
+    const projectedItems = currentItem
+      ? cart.map((item) => (item.id === product.id ? { ...item, qty: item.qty + 1 } : item))
+      : [...cart, { ...product, qty: 1 }];
+    const insufficientIngredient = getInsufficientIngredientForCart(projectedItems);
+
+    if (insufficientIngredient) {
+      showToast(
+        "error",
+        "Bahan tidak cukup",
+        `${insufficientIngredient.ingredient?.name ?? "Bahan resep"} tidak cukup untuk meracik ${product.name}.`,
+      );
+      return;
+    }
+
     setCart((items) => {
       const existing = items.find((item) => item.id === product.id);
 
       if (existing) {
+        if (existing.qty >= product.stock) {
+          showToast("error", "Stok tidak cukup", `Maksimal ${product.stock} item untuk ${product.name}.`);
+          return items;
+        }
+
         return items.map((item) =>
           item.id === product.id ? { ...item, qty: item.qty + 1 } : item,
         );
@@ -627,34 +866,138 @@ export default function MavaposShell({
 
       return [...items, { ...product, qty: 1 }];
     });
+    showToast("success", "Produk ditambahkan", `${product.name} masuk ke keranjang.`);
   }
 
   function updateQty(id: number, change: number) {
-    setCart((items) =>
-      items
-        .map((item) => (item.id === id ? { ...item, qty: item.qty + change } : item))
-        .filter((item) => item.qty > 0),
-    );
+    setCart((items) => {
+      const currentItem = items.find((item) => item.id === id);
+
+      if (!currentItem) {
+        return items;
+      }
+
+      const latestProduct = products.find((product) => product.id === id);
+      const nextQty = currentItem.qty + change;
+
+      if (change > 0) {
+        const projectedItems = items.map((item) =>
+          item.id === id ? { ...item, qty: nextQty } : item,
+        );
+        const insufficientIngredient = getInsufficientIngredientForCart(projectedItems);
+
+        if (insufficientIngredient) {
+          showToast(
+            "error",
+            "Bahan tidak cukup",
+            `${insufficientIngredient.ingredient?.name ?? "Bahan resep"} tidak cukup untuk menambah porsi.`,
+          );
+          return items;
+        }
+      }
+
+      if (change > 0 && latestProduct && nextQty > latestProduct.stock) {
+        showToast("error", "Stok tidak cukup", `Stok ${latestProduct.name} tersisa ${latestProduct.stock}.`);
+        return items;
+      }
+
+      return items
+        .map((item) => (item.id === id ? { ...item, qty: nextQty } : item))
+        .filter((item) => item.qty > 0);
+    });
+  }
+
+  function applyPromoCode() {
+    const code = normalizePromoCode(promoCodeInput);
+    const matchedPromo = transactionPromos.find((promo) => promo.code === code);
+
+    if (!matchedPromo) {
+      setAppliedPromoId(null);
+      setPromoCodeError("Kode promo tidak ditemukan.");
+      showToast("error", "Kode promo gagal", "Kode tidak aktif atau tidak cocok dengan promo outlet.");
+      return;
+    }
+
+    setAppliedPromoId(matchedPromo.id);
+    setPromoCodeInput(code);
+    setPromoCodeError("");
+    showToast("success", "Promo diterapkan", `${matchedPromo.name} memotong total transaksi.`);
+  }
+
+  function removeAppliedPromo({ silent = false }: { silent?: boolean } = {}) {
+    setAppliedPromoId(null);
+    setPromoCodeInput("");
+    setPromoCodeError("");
+    if (!silent) {
+      showToast("info", "Promo dihapus", "Total transaksi dikembalikan tanpa promo.");
+    }
   }
 
   function openPaymentModal() {
+    if (cart.length === 0) {
+      showToast("error", "Keranjang kosong", "Tambahkan produk sebelum membuka pembayaran.");
+      return;
+    }
+
     setPaymentStep("form");
     setCashReceived((value) => Math.max(value, total));
     setPaymentModal(true);
+    showToast("info", "Pembayaran dibuka", "Periksa metode bayar sebelum konfirmasi transaksi.");
   }
 
   function confirmPayment() {
     if (!isPaymentReady) {
+      showToast("error", "Pembayaran belum siap", "Pastikan total sudah benar dan uang diterima mencukupi.");
       return;
     }
 
+    const insufficientItem = cart.find((item) => {
+      const latestProduct = products.find((product) => product.id === item.id);
+      return !latestProduct || latestProduct.stock < item.qty;
+    });
+
+    if (insufficientItem) {
+      showToast(
+        "error",
+        "Stok berubah",
+        `${insufficientItem.name} tidak cukup untuk menyelesaikan transaksi.`,
+      );
+      return;
+    }
+
+    const insufficientIngredient = getInsufficientIngredientForCart(cart);
+
+    if (insufficientIngredient) {
+      showToast(
+        "error",
+        "Bahan resep tidak cukup",
+        `${insufficientIngredient.ingredient?.name ?? "Bahan"} tidak cukup untuk menyelesaikan transaksi ini.`,
+      );
+      return;
+    }
+
+    cart.forEach((item) => {
+      applyStockChange(item.id, item.qty * -1, "Penjualan", `Transaksi kasir #MV-1049`);
+    });
+    getRecipeRequirementsForCart(cart).forEach((qtyNeeded, ingredientId) => {
+      setIngredients((items) =>
+        items.map((ingredient) =>
+          ingredient.id === ingredientId
+            ? { ...ingredient, stock: Number((ingredient.stock - qtyNeeded).toFixed(3)) }
+            : ingredient,
+        ),
+      );
+    });
     setPaymentStep("success");
+    showToast("success", "Pembayaran berhasil", "Transaksi selesai dan struk siap dikirim.");
   }
 
   function finishPayment() {
     setCart([]);
+    removeAppliedPromo({ silent: true });
     setPaymentModal(false);
     setPaymentStep("form");
+    showToast("success", "Transaksi baru", "Keranjang dikosongkan untuk transaksi berikutnya.");
   }
 
   function openCreateProduct() {
@@ -699,10 +1042,13 @@ export default function MavaposShell({
     };
 
     if (!normalizedForm.name || normalizedForm.price < 0 || normalizedForm.stock < 0) {
+      showToast("error", "Produk gagal disimpan", "Nama produk wajib diisi, harga dan stok tidak boleh negatif.");
       return;
     }
 
     if (productModal === "edit" && editingProductId) {
+      const existingProduct = products.find((item) => item.id === editingProductId);
+
       setProducts((items) =>
         items.map((item) =>
           item.id === editingProductId ? { ...item, ...normalizedForm } : item,
@@ -713,6 +1059,17 @@ export default function MavaposShell({
           item.id === editingProductId ? { ...item, ...normalizedForm } : item,
         ),
       );
+      if (existingProduct && existingProduct.stock !== normalizedForm.stock) {
+        logStockMovement(
+          existingProduct,
+          "Penyesuaian",
+          normalizedForm.stock - existingProduct.stock,
+          existingProduct.stock,
+          normalizedForm.stock,
+          "Perubahan stok dari form produk",
+        );
+      }
+      showToast("success", "Produk diperbarui", `${normalizedForm.name} berhasil disimpan.`);
     } else {
       setProducts((items) => [
         ...items,
@@ -721,6 +1078,7 @@ export default function MavaposShell({
           ...normalizedForm,
         },
       ]);
+      showToast("success", "Produk ditambahkan", `${normalizedForm.name} tersedia di kasir.`);
     }
 
     closeProductModal();
@@ -733,12 +1091,14 @@ export default function MavaposShell({
 
     setProducts((items) => items.filter((item) => item.id !== deleteProduct.id));
     setCart((items) => items.filter((item) => item.id !== deleteProduct.id));
+    showToast("success", "Produk dihapus", `${deleteProduct.name} dihapus dari data produk.`);
     setDeleteProduct(null);
   }
 
   function openCreatePromo() {
     setPromoForm({
       name: "",
+      code: "",
       type: "Diskon nominal",
       target: "",
       value: "",
@@ -752,6 +1112,7 @@ export default function MavaposShell({
   function openEditPromo(promo: Promo) {
     setPromoForm({
       name: promo.name,
+      code: promo.code,
       type: promo.type,
       target: promo.target,
       value: promo.value,
@@ -771,12 +1132,14 @@ export default function MavaposShell({
     const normalizedForm = {
       ...promoForm,
       name: promoForm.name.trim(),
+      code: normalizePromoCode(promoForm.code || promoForm.name),
       target: promoForm.target.trim(),
       value: promoForm.value.trim(),
       period: promoForm.period.trim(),
     };
 
-    if (!normalizedForm.name || !normalizedForm.target || !normalizedForm.value) {
+    if (!normalizedForm.name || !normalizedForm.code || !normalizedForm.target || !normalizedForm.value) {
+      showToast("error", "Promo gagal disimpan", "Nama, kode, target, dan nilai promo wajib diisi.");
       return;
     }
 
@@ -784,6 +1147,7 @@ export default function MavaposShell({
       setPromos((items) =>
         items.map((item) => (item.id === editingPromoId ? { ...item, ...normalizedForm } : item)),
       );
+      showToast("success", "Promo diperbarui", `${normalizedForm.name} berhasil disimpan.`);
     } else {
       setPromos((items) => [
         ...items,
@@ -792,6 +1156,7 @@ export default function MavaposShell({
           ...normalizedForm,
         },
       ]);
+      showToast("success", "Promo ditambahkan", `${normalizedForm.name} aktif sesuai status yang dipilih.`);
     }
 
     closePromoModal();
@@ -803,6 +1168,10 @@ export default function MavaposShell({
     }
 
     setPromos((items) => items.filter((item) => item.id !== deletePromo.id));
+    if (deletePromo.id === appliedPromoId) {
+      removeAppliedPromo({ silent: true });
+    }
+    showToast("success", "Promo dihapus", `${deletePromo.name} dihapus dari campaign.`);
     setDeletePromo(null);
   }
 
@@ -843,6 +1212,7 @@ export default function MavaposShell({
     };
 
     if (!normalizedForm.name || !normalizedForm.phone) {
+      showToast("error", "Staf gagal disimpan", "Nama staf dan nomor WhatsApp wajib diisi.");
       return;
     }
 
@@ -850,6 +1220,7 @@ export default function MavaposShell({
       setStaffMembers((items) =>
         items.map((item) => (item.id === editingStaffId ? { ...item, ...normalizedForm } : item)),
       );
+      showToast("success", "Staf diperbarui", `${normalizedForm.name} berhasil disimpan.`);
     } else if (staffMembers.length < 2) {
       setStaffMembers((items) => [
         ...items,
@@ -858,6 +1229,10 @@ export default function MavaposShell({
           ...normalizedForm,
         },
       ]);
+      showToast("success", "Staf ditambahkan", `${normalizedForm.name} dapat mengakses kasir.`);
+    } else {
+      showToast("error", "Slot staf penuh", "Paket Core membatasi maksimal 2 staf kasir.");
+      return;
     }
 
     closeStaffModal();
@@ -869,6 +1244,7 @@ export default function MavaposShell({
     }
 
     setStaffMembers((items) => items.filter((item) => item.id !== deleteStaff.id));
+    showToast("success", "Staf dihapus", `${deleteStaff.name} kehilangan akses kasir.`);
     setDeleteStaff(null);
   }
 
@@ -876,12 +1252,277 @@ export default function MavaposShell({
     const name = categoryForm.name.trim();
 
     if (!name || categories.some((item) => item.toLowerCase() === name.toLowerCase())) {
+      showToast("error", "Kategori gagal ditambahkan", "Nama kategori kosong atau sudah tersedia.");
       return;
     }
 
     setCategories((items) => [...items, name]);
     setCategoryForm({ name: "" });
     setCategoryModal(false);
+    showToast("success", "Kategori ditambahkan", `${name} tersedia di filter kasir dan form produk.`);
+  }
+
+  function deleteCategory(name: string) {
+    const isInUse = products.some((product) => product.category === name);
+
+    if (isInUse) {
+      showToast(
+        "error",
+        "Kategori tidak bisa dihapus",
+        "Masih ada produk yang memakai kategori ini.",
+      );
+      return;
+    }
+
+    setCategories((items) => items.filter((item) => item !== name));
+    if (category === name) {
+      setCategory("Semua");
+    }
+    if (productForm.category === name) {
+      setProductForm((form) => ({ ...form, category: initialCategories[0] ?? "FnB" }));
+    }
+    showToast("success", "Kategori dihapus", `${name} dihapus dari daftar kategori.`);
+  }
+
+  function openCreateIngredient() {
+    setIngredientForm({
+      name: "",
+      unit: "kg",
+      stock: 0,
+      minStock: 0,
+      costPerUnit: 0,
+      usedFor: "",
+    });
+    setEditingIngredientId(null);
+    setIngredientModal("create");
+  }
+
+  function openEditIngredient(ingredient: Ingredient) {
+    setIngredientForm({
+      name: ingredient.name,
+      unit: ingredient.unit,
+      stock: ingredient.stock,
+      minStock: ingredient.minStock,
+      costPerUnit: ingredient.costPerUnit,
+      usedFor: ingredient.usedFor.join(", "),
+    });
+    setEditingIngredientId(ingredient.id);
+    setIngredientModal("edit");
+  }
+
+  function closeIngredientModal() {
+    setIngredientModal(null);
+    setEditingIngredientId(null);
+  }
+
+  function saveIngredient() {
+    const normalizedForm = {
+      ...ingredientForm,
+      name: ingredientForm.name.trim(),
+      unit: ingredientForm.unit.trim(),
+      stock: Number(ingredientForm.stock),
+      minStock: Number(ingredientForm.minStock),
+      costPerUnit: Number(ingredientForm.costPerUnit),
+      usedFor: ingredientForm.usedFor
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean),
+    };
+
+    if (!normalizedForm.name || !normalizedForm.unit || normalizedForm.stock < 0 || normalizedForm.minStock < 0) {
+      showToast("error", "Bahan gagal disimpan", "Nama, unit, stok, dan minimum stok harus valid.");
+      return;
+    }
+
+    if (ingredientModal === "edit" && editingIngredientId) {
+      setIngredients((items) =>
+        items.map((item) =>
+          item.id === editingIngredientId ? { id: editingIngredientId, ...normalizedForm } : item,
+        ),
+      );
+      showToast("success", "Bahan diperbarui", `${normalizedForm.name} berhasil disimpan.`);
+    } else {
+      setIngredients((items) => [
+        ...items,
+        {
+          id: Math.max(0, ...items.map((item) => item.id)) + 1,
+          ...normalizedForm,
+        },
+      ]);
+      showToast("success", "Bahan ditambahkan", `${normalizedForm.name} siap dipakai dalam racikan menu.`);
+    }
+
+    closeIngredientModal();
+  }
+
+  function confirmDeleteIngredient() {
+    if (!deleteIngredient) {
+      return;
+    }
+
+    setIngredients((items) => items.filter((item) => item.id !== deleteIngredient.id));
+    showToast("success", "Bahan dihapus", `${deleteIngredient.name} dihapus dari daftar bahan.`);
+    setDeleteIngredient(null);
+  }
+
+  function openCreateExpense() {
+    setExpenseForm({
+      title: "",
+      category: "Operasional",
+      amount: 0,
+      date: "2026-05-07",
+      paymentMethod: "Kas outlet",
+      note: "",
+      status: "Tercatat",
+    });
+    setEditingExpenseId(null);
+    setExpenseModal("create");
+  }
+
+  function openEditExpense(expense: Expense) {
+    setExpenseForm({
+      title: expense.title,
+      category: expense.category,
+      amount: expense.amount,
+      date: expense.date,
+      paymentMethod: expense.paymentMethod,
+      note: expense.note,
+      status: expense.status,
+    });
+    setEditingExpenseId(expense.id);
+    setExpenseModal("edit");
+  }
+
+  function closeExpenseModal() {
+    setExpenseModal(null);
+    setEditingExpenseId(null);
+  }
+
+  function saveExpense() {
+    const normalizedForm = {
+      ...expenseForm,
+      title: expenseForm.title.trim(),
+      category: expenseForm.category.trim(),
+      amount: Number(expenseForm.amount),
+      note: expenseForm.note.trim(),
+    };
+
+    if (!normalizedForm.title || !normalizedForm.category || normalizedForm.amount <= 0 || !normalizedForm.date) {
+      showToast("error", "Pengeluaran gagal disimpan", "Judul, kategori, tanggal, dan nominal harus valid.");
+      return;
+    }
+
+    if (expenseModal === "edit" && editingExpenseId) {
+      setExpenses((items) =>
+        items.map((item) =>
+          item.id === editingExpenseId ? { id: editingExpenseId, ...normalizedForm } : item,
+        ),
+      );
+      showToast("success", "Pengeluaran diperbarui", `${normalizedForm.title} berhasil disimpan.`);
+    } else {
+      setExpenses((items) => [
+        ...items,
+        {
+          id: Math.max(0, ...items.map((item) => item.id)) + 1,
+          ...normalizedForm,
+        },
+      ]);
+      showToast("success", "Pengeluaran ditambahkan", `${normalizedForm.title} berhasil dicatat.`);
+    }
+
+    closeExpenseModal();
+  }
+
+  function confirmDeleteExpense() {
+    if (!deleteExpense) {
+      return;
+    }
+
+    setExpenses((items) => items.filter((item) => item.id !== deleteExpense.id));
+    showToast("success", "Pengeluaran dihapus", `${deleteExpense.title} dihapus dari catatan pengeluaran.`);
+    setDeleteExpense(null);
+  }
+
+  function saveStockAdjustment() {
+    const qty = Number(stockAdjustmentForm.qty);
+    const productId = Number(stockAdjustmentForm.productId);
+    const selectedProduct = products.find((product) => product.id === productId);
+    const normalizedNote = stockAdjustmentForm.note.trim();
+
+    if (!selectedProduct || qty <= 0) {
+      showToast("error", "Mutasi stok gagal", "Pilih produk dan isi jumlah stok yang valid.");
+      return;
+    }
+
+    const qtyChange = stockAdjustmentForm.type === "Stok masuk" ? qty : qty * -1;
+    const success = applyStockChange(
+      productId,
+      qtyChange,
+      stockAdjustmentForm.type,
+      normalizedNote || `Mutasi ${stockAdjustmentForm.type.toLowerCase()}`,
+    );
+
+    if (!success) {
+      showToast("error", "Mutasi stok gagal", "Jumlah penyesuaian melebihi stok yang tersedia.");
+      return;
+    }
+
+    setStockAdjustmentForm({
+      productId: "",
+      type: "Stok masuk",
+      qty: 0,
+      note: "",
+    });
+    showToast(
+      "success",
+      "Mutasi stok disimpan",
+      `${selectedProduct.name} berhasil dicatat sebagai ${stockAdjustmentForm.type.toLowerCase()}.`,
+    );
+  }
+
+  function saveStockOpname() {
+    const changedRows = products
+      .map((product) => {
+        const row = opnameInputs[String(product.id)];
+        const actualStock = Number(row?.actualStock);
+
+        if (!row || row.actualStock === "" || Number.isNaN(actualStock) || actualStock === product.stock) {
+          return null;
+        }
+
+        return {
+          product,
+          actualStock,
+          note: row.note.trim(),
+          diff: actualStock - product.stock,
+        };
+      })
+      .filter((item): item is NonNullable<typeof item> => Boolean(item));
+
+    if (changedRows.length === 0) {
+      showToast("info", "Tidak ada perubahan opname", "Stok fisik sama dengan stok sistem.");
+      return;
+    }
+
+    changedRows.forEach(({ product, actualStock, note, diff }) => {
+      setProducts((items) =>
+        items.map((item) => (item.id === product.id ? { ...item, stock: actualStock } : item)),
+      );
+      setCart((items) =>
+        items.map((item) => (item.id === product.id ? { ...item, stock: actualStock } : item)),
+      );
+      logStockMovement(
+        product,
+        "Stok opname",
+        diff,
+        product.stock,
+        actualStock,
+        note || "Penyesuaian dari stok opname",
+      );
+    });
+
+    setOpnameInputs({});
+    showToast("success", "Stok opname disimpan", `${changedRows.length} produk berhasil disesuaikan.`);
   }
 
 	  async function login(event: React.FormEvent<HTMLFormElement>) {
@@ -901,8 +1542,12 @@ export default function MavaposShell({
       const user = mapSupabaseUser(data.user);
 	      setAuthUser(user);
 	      setAuthSource("supabase");
+	      setShowSplash(false);
+	      setActiveMenu("Dashboard");
 	      window.localStorage.removeItem("mavapos.session");
 	      setAuthSubmitting(false);
+	      showToast("success", "Login berhasil", `Selamat datang, ${user.name}.`);
+	      router.push("/dashboard");
 	      return;
 	    }
 
@@ -913,16 +1558,22 @@ export default function MavaposShell({
     );
 
 	    if (!matchedUser) {
-	      setAuthError(error?.message ?? "Email atau password tidak sesuai.");
+	      const message = error?.message ?? "Email atau password tidak sesuai.";
+	      setAuthError(message);
 	      setAuthSubmitting(false);
+	      showToast("error", "Login gagal", message);
 	      return;
 	    }
 	
 	    setAuthUser(matchedUser.user);
 	    setAuthSource("demo");
+	    setShowSplash(false);
+	    setActiveMenu("Dashboard");
 	    setAuthError("");
 	    window.localStorage.setItem("mavapos.session", JSON.stringify(matchedUser.user));
 	    setAuthSubmitting(false);
+	    showToast("success", "Login berhasil", `Selamat datang, ${matchedUser.user.name}.`);
+	    router.push("/dashboard");
 	  }
 	
 	  async function register(event: React.FormEvent<HTMLFormElement>) {
@@ -934,8 +1585,10 @@ export default function MavaposShell({
 	    const normalizedEmail = registerForm.email.trim().toLowerCase();
 	
 	    if (registerForm.password.length < 8) {
-	      setAuthError("Password minimal 8 karakter.");
+	      const message = "Password minimal 8 karakter.";
+	      setAuthError(message);
 	      setAuthSubmitting(false);
+	      showToast("error", "Registrasi gagal", message);
 	      return;
 	    }
 	
@@ -957,17 +1610,23 @@ export default function MavaposShell({
 	    if (error) {
 	      setAuthError(error.message);
 	      setAuthSubmitting(false);
+	      showToast("error", "Registrasi gagal", error.message);
 	      return;
 	    }
 	
 	    if (data.session?.user) {
 	      setAuthUser(mapSupabaseUser(data.session.user));
 	      setAuthSource("supabase");
+	      setShowSplash(false);
+	      setActiveMenu("Dashboard");
 	      window.localStorage.removeItem("mavapos.session");
+	      showToast("success", "Registrasi berhasil", "Akun owner berhasil dibuat.");
+	      router.push("/dashboard");
 	    } else {
 	      setAuthMode("login");
 	      setLoginForm((form) => ({ ...form, email: normalizedEmail, password: "" }));
 	      setAuthNotice("Registrasi berhasil. Cek email untuk verifikasi sebelum masuk.");
+	      showToast("success", "Registrasi berhasil", "Cek email untuk verifikasi sebelum masuk.");
 	    }
 	
 	    setRegisterForm({
@@ -994,11 +1653,13 @@ export default function MavaposShell({
 	
 	    if (error) {
 	      setAuthError(error.message);
+	      showToast("error", "Reset password gagal", error.message);
 	    } else {
 	      setAuthNotice("Link reset password sudah dikirim jika email terdaftar.");
 	      setAuthMode("login");
 	      setLoginForm((form) => ({ ...form, email, password: "" }));
 	      setForgotEmail("");
+	      showToast("success", "Link reset dikirim", "Cek email untuk melanjutkan pemulihan akun.");
 	    }
 	
 	    setAuthSubmitting(false);
@@ -1011,14 +1672,18 @@ export default function MavaposShell({
 	    setAuthSubmitting(true);
 	
 	    if (newPasswordForm.password.length < 8) {
-	      setAuthError("Password baru minimal 8 karakter.");
+	      const message = "Password baru minimal 8 karakter.";
+	      setAuthError(message);
 	      setAuthSubmitting(false);
+	      showToast("error", "Password gagal diperbarui", message);
 	      return;
 	    }
 	
 	    if (newPasswordForm.password !== newPasswordForm.confirmPassword) {
-	      setAuthError("Konfirmasi password belum sama.");
+	      const message = "Konfirmasi password belum sama.";
+	      setAuthError(message);
 	      setAuthSubmitting(false);
+	      showToast("error", "Password gagal diperbarui", message);
 	      return;
 	    }
 	
@@ -1028,11 +1693,13 @@ export default function MavaposShell({
 	
 	    if (error) {
 	      setAuthError(error.message);
+	      showToast("error", "Password gagal diperbarui", error.message);
 	    } else {
 	      setAuthMode("login");
 	      setNewPasswordForm({ password: "", confirmPassword: "" });
 	      setAuthNotice("Password berhasil diperbarui. Silakan masuk kembali.");
 	      await supabase.auth.signOut();
+	      showToast("success", "Password diperbarui", "Silakan masuk kembali dengan password baru.");
 	    }
 	
 	    setAuthSubmitting(false);
@@ -1045,8 +1712,10 @@ export default function MavaposShell({
 
     setAuthUser(null);
     setAuthSource(null);
-	    setActiveMenu("Kasir");
+	    setShowSplash(true);
+	    setActiveMenu("Dashboard");
 	    window.localStorage.removeItem("mavapos.session");
+	    showToast("success", "Logout berhasil", "Sesi pengguna sudah ditutup.");
 	  }
 	
 		  const authCopy = {
@@ -1068,17 +1737,22 @@ export default function MavaposShell({
 		    },
 		  }[authMode];
 	
-	  if (showSplash || !authReady) {
-    return <SplashScreen />;
+	  if (!authReady) {
+    return null;
   }
 
 	  if (!authUser) {
+    if (showSplash) {
+      return <SplashScreen />;
+    }
+
 	    return (
 	      <main className="auth-scope min-h-screen bg-[#f7faf8] text-foreground">
+	        <ToastViewport toasts={toasts} onDismiss={dismissToast} />
 	        <div className="grid min-h-screen lg:grid-cols-[minmax(0,1fr)_460px]">
 		          <section className="hidden flex-col justify-between bg-[#0369a1] p-10 text-white lg:flex">
 		            <div>
-		              <LoginLogo className="h-9 w-36" />
+		              <LoginLogo className="h-auto w-36" />
 		            </div>
 	            <div className="max-w-xl">
 	              <Badge className="bg-white text-[#075985] hover:bg-white">POS UMKM FnB & Retail</Badge>
@@ -1120,7 +1794,7 @@ export default function MavaposShell({
 		            >
 		              <div className="text-center">
 		                <div className="flex justify-center">
-		                  <LoginLogo className="h-10 w-40" />
+		                  <LoginLogo className="h-auto w-40" />
 		                </div>
 		                <h1 className="mt-6 text-xl font-semibold">{authCopy.title}</h1>
 		                <p className="mt-2 text-sm leading-5 text-[#69756f]">{authCopy.description}</p>
@@ -1382,6 +2056,7 @@ export default function MavaposShell({
 
   return (
     <main className="min-h-screen bg-background text-foreground">
+      <ToastViewport toasts={toasts} onDismiss={dismissToast} />
       <div
         className={`grid min-h-screen grid-cols-1 ${
           activeMenu === "Kasir" ? "" : "lg:grid-cols-[248px_minmax(0,1fr)]"
@@ -1399,7 +2074,7 @@ export default function MavaposShell({
                 <button
                   key={item.label}
                   onClick={() => changeMenu(item.label)}
-                  className={`flex h-11 items-center gap-3 rounded-lg px-3 text-sm font-medium transition ${
+                  className={`flex h-11 items-center gap-3 rounded-lg px-3 !text-[14px] font-medium transition ${
                     activeMenu === item.label
                       ? "bg-[#e0f2fe] text-[#075985]"
                       : "text-[#66716b] hover:bg-[#f3f6f1] hover:text-[#1f2623]"
@@ -1427,26 +2102,8 @@ export default function MavaposShell({
                   Aktif
                 </span>
               </div>
-              <p className="mt-2 text-xs font-medium text-[#69756f]">Rp169.000/bulan</p>
-              <div className="mt-4 grid gap-3 text-sm">
-                <div>
-                  <div className="flex justify-between">
-                    <span className="text-[#69756f]">Produk</span>
-                    <strong>{products.length} / 30</strong>
-                  </div>
-                  <div className="mt-2 h-2 rounded-full bg-[#e5ebe3]">
-                    <div
-                      className="h-2 rounded-full bg-[#0369a1]"
-                      style={{ width: `${productUsage}%` }}
-                    />
-                  </div>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-[#69756f]">Staf kasir</span>
-                  <strong>{staffMembers.length} / 2</strong>
-                </div>
-              </div>
-              <Button className="mt-4 w-full" variant="outline" onClick={logout}>
+              <Button className="mt-4 w-full !text-[14px]" variant="outline" onClick={logout}>
+                <LogOut data-icon="inline-start" />
                 Keluar
               </Button>
             </section>
@@ -1475,21 +2132,57 @@ export default function MavaposShell({
 	              <div className="flex flex-wrap items-center gap-2">
                 {activeMenu === "Produk & Stok" ? (
                   <>
-                    <button
-                      onClick={() => setCategoryModal(true)}
-                      className="flex h-10 items-center gap-2 rounded-lg border border-input bg-background px-3 text-sm font-semibold"
-                    >
-                      <Boxes size={17} />
-                      Tambah kategori
-                    </button>
-                    <button
-                      onClick={openCreateProduct}
-                      className="flex h-10 items-center gap-2 rounded-lg bg-[#0369a1] px-4 text-sm font-semibold text-white"
-                    >
-                      <Plus size={17} />
-                      Tambah produk
-                    </button>
+                    {stockView === "products" ? (
+                      <>
+                        <button
+                          onClick={() => setCategoryModal(true)}
+                          className="flex h-10 items-center gap-2 rounded-lg border border-input bg-background px-3 text-sm font-semibold"
+                        >
+                          <Boxes size={17} />
+                          Tambah kategori
+                        </button>
+                        <button
+                          onClick={openCreateProduct}
+                          className="flex h-10 items-center gap-2 rounded-lg bg-[#0369a1] px-4 text-sm font-semibold text-white"
+                        >
+                          <Plus size={17} />
+                          Tambah produk
+                        </button>
+                      </>
+                    ) : stockView === "movements" ? (
+                      <button
+                        onClick={saveStockAdjustment}
+                        className="flex h-10 items-center gap-2 rounded-lg bg-[#0369a1] px-4 text-sm font-semibold text-white"
+                      >
+                        <Plus size={17} />
+                        Simpan mutasi
+                      </button>
+                    ) : (
+                      <button
+                        onClick={saveStockOpname}
+                        className="flex h-10 items-center gap-2 rounded-lg bg-[#0369a1] px-4 text-sm font-semibold text-white"
+                      >
+                        <Check size={17} />
+                        Simpan opname
+                      </button>
+                    )}
 	                  </>
+	                ) : activeMenu === "Bahan" ? (
+	                  <button
+	                    onClick={openCreateIngredient}
+	                    className="flex h-10 items-center gap-2 rounded-lg bg-[#0369a1] px-4 text-sm font-semibold text-white"
+	                  >
+	                    <Plus size={17} />
+	                    Tambah bahan
+	                  </button>
+	                ) : activeMenu === "Pengeluaran" ? (
+	                  <button
+	                    onClick={openCreateExpense}
+	                    className="flex h-10 items-center gap-2 rounded-lg bg-[#0369a1] px-4 text-sm font-semibold text-white"
+	                  >
+	                    <Plus size={17} />
+	                    Tambah pengeluaran
+	                  </button>
 	                ) : activeMenu === "Promo" ? (
 	                  <button
 	                    onClick={openCreatePromo}
@@ -1509,6 +2202,13 @@ export default function MavaposShell({
 	                  </button>
 	            ) : activeMenu === "Kasir" ? (
                   <>
+                    <button
+                      onClick={() => changeMenu("Dashboard")}
+                      className="flex h-10 items-center gap-2 rounded-lg border border-input bg-background px-3 text-sm font-semibold"
+                    >
+                      <ReceiptText size={17} />
+                      Dashboard
+                    </button>
                     {canManageOutlet && (
                       <button
                         onClick={() => changeMenu("Produk & Stok")}
@@ -1528,7 +2228,7 @@ export default function MavaposShell({
                     </button>
                     <button
                       onClick={logout}
-                      className="flex h-10 items-center gap-2 rounded-lg border border-input bg-background px-3 text-sm font-semibold"
+                      className="flex h-10 items-center gap-2 rounded-lg border border-input bg-background px-3 !text-[14px] font-semibold"
                     >
                       Keluar
                     </button>
@@ -1537,7 +2237,92 @@ export default function MavaposShell({
 	              </div>
             </header>
 
-            {activeMenu === "Produk & Stok" ? (
+            {activeMenu === "Dashboard" ? (
+              <>
+                <section className="mt-6 grid gap-3 xl:grid-cols-4">
+                  {dashboardStats.map((item) => (
+                    <article key={item.label} className="rounded-lg border border-[#dde3da] bg-white p-4">
+                      <p className="text-sm font-medium text-[#69756f]">{item.label}</p>
+                      <p className="mt-2 text-2xl font-semibold tracking-tight">{item.value}</p>
+                      <p className="mt-1 text-xs font-medium text-[#0369a1]">{item.note}</p>
+                    </article>
+                  ))}
+                </section>
+
+                <section className="mt-6 grid gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)]">
+                  <article className="rounded-lg border border-[#dde3da] bg-white p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <h2 className="font-semibold">Chart penjualan mingguan</h2>
+                        <p className="mt-1 text-sm text-[#69756f]">
+                          Tren omzet harian outlet selama 7 hari terakhir.
+                        </p>
+                      </div>
+                      <Badge variant="outline">7 hari</Badge>
+                    </div>
+                    <div className="mt-5 rounded-lg border border-[#eef2ee] bg-[#fbfcfa] p-3">
+                      <div className="grid h-[220px] grid-cols-[34px_minmax(0,1fr)] gap-3">
+                        <div className="flex h-full flex-col justify-between pb-6 text-[10px] font-medium text-[#8a968f]">
+                          <span>1.5M</span>
+                          <span>1.0M</span>
+                          <span>0.5M</span>
+                          <span>0</span>
+                        </div>
+                        <div className="grid h-full grid-cols-7 gap-2">
+                          {salesChart.map((item) => (
+                            <div key={item.day} className="grid h-full grid-rows-[1fr_auto] gap-2">
+                              <div className="relative flex items-end rounded-xl bg-[linear-gradient(to_top,#e8efe9_1px,transparent_1px)] bg-[length:100%_25%] px-1 pb-1">
+                                <div
+                                  className="w-full rounded-[14px] bg-[#0369a1] transition-all"
+                                  style={{ height: `${Math.max(10, (item.amount / maxSalesAmount) * 100)}%` }}
+                                />
+                              </div>
+                              <div className="text-center">
+                                <p className="text-xs font-semibold text-[#1f2623]">{item.day}</p>
+                                <p className="mt-1 text-[10px] text-[#69756f]">
+                                  {formatCurrency(item.amount).replace("Rp", "Rp ")}
+                                </p>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </article>
+
+                  {[
+                    {
+                      label: "Persentase profit",
+                      value: 24,
+                      note: "Laba bersih bergerak stabil dari kategori minuman.",
+                    },
+                    {
+                      label: "Persentase margin",
+                      value: 18,
+                      note: "Margin rata-rata terjaga dengan diskon terkendali.",
+                    },
+                  ].map((item) => (
+                    <article key={item.label} className="rounded-lg border border-[#dde3da] bg-white p-4">
+                      <h2 className="font-semibold">{item.label}</h2>
+                      <div className="mt-6 flex items-center justify-center">
+                        <div
+                          className="grid size-40 place-items-center rounded-full"
+                          style={{
+                            background: `conic-gradient(#0369a1 ${item.value}%, #e5ebe3 ${item.value}% 100%)`,
+                          }}
+                        >
+                          <div className="grid size-28 place-items-center rounded-full bg-white text-center">
+                            <span className="text-3xl font-semibold tracking-tight">{item.value}%</span>
+                            <span className="text-xs text-[#69756f]">bulan ini</span>
+                          </div>
+                        </div>
+                      </div>
+                      <p className="mt-6 text-sm leading-6 text-[#69756f]">{item.note}</p>
+                    </article>
+                  ))}
+                </section>
+              </>
+            ) : activeMenu === "Produk & Stok" ? (
               <>
                 <section className="mt-6 grid gap-3 md:grid-cols-3">
                   {[
@@ -1554,127 +2339,725 @@ export default function MavaposShell({
                 </section>
 
                 <section className="mt-6 rounded-lg border border-[#dde3da] bg-white">
-                  <div className="flex flex-col gap-3 border-b border-[#dde3da] p-4 md:flex-row md:items-center md:justify-between">
-                    <div>
-                      <h2 className="font-semibold">Data produk dan stok</h2>
-                      <p className="mt-1 text-sm text-[#69756f]">
-                        Kelola harga, kategori, label, dan jumlah stok untuk layar kasir.
-                      </p>
+                  <div className="flex flex-col gap-3 border-b border-[#dde3da] p-4">
+                    <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                      <div>
+                        <h2 className="font-semibold">Kelola stok outlet</h2>
+                        <p className="mt-1 text-sm text-[#69756f]">
+                          Pisahkan kerja produk, mutasi stok, dan stok opname supaya operasional lebih jelas.
+                        </p>
+                      </div>
+                      {stockView === "products" && (
+                        <div className="relative md:w-72">
+                          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8a968f]" size={18} />
+                          <input
+                            value={productQuery}
+                            onChange={(event) => setProductQuery(event.target.value)}
+                            className="h-10 w-full rounded-lg border border-[#d7dfd4] bg-[#fbfcfa] pl-10 pr-3 text-sm outline-none focus:border-[#0369a1]"
+                            placeholder="Cari produk atau kategori"
+                          />
+                        </div>
+                      )}
                     </div>
-                    <div className="relative md:w-72">
-                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8a968f]" size={18} />
-                      <input
-                        value={productQuery}
-                        onChange={(event) => setProductQuery(event.target.value)}
-                        className="h-10 w-full rounded-lg border border-[#d7dfd4] bg-[#fbfcfa] pl-10 pr-3 text-sm outline-none focus:border-[#0369a1]"
-                        placeholder="Cari produk atau kategori"
-                      />
+                    <div className="flex flex-wrap gap-2">
+                      {[
+                        ["products", "Daftar produk"],
+                        ["movements", "Mutasi stok"],
+                        ["opname", "Stok opname"],
+                      ].map(([value, label]) => (
+                        <button
+                          key={value}
+                          onClick={() => setStockView(value as "products" | "movements" | "opname")}
+                          className={`h-10 rounded-lg px-4 text-sm font-semibold ${
+                            stockView === value
+                              ? "bg-[#0369a1] text-white"
+                              : "border border-[#d7dfd4] bg-white text-[#4d5953]"
+                          }`}
+                        >
+                          {label}
+                        </button>
+                      ))}
                     </div>
                   </div>
 
-                  <div className="grid gap-3 p-4 md:hidden">
-                    {managedProducts.map((product) => (
-                      <article key={product.id} className="rounded-lg border border-[#dde3da] bg-[#fbfcfa] p-3">
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="flex items-start gap-3">
-                            <div className="flex size-9 items-center justify-center rounded-lg bg-[#e0f2fe] text-[#075985]">
-                              {product.category === "FnB" ? <Utensils size={18} /> : <Package size={18} />}
-                            </div>
-                            <div>
-                              <p className="font-semibold">{product.name}</p>
-                              <p className="mt-0.5 text-xs text-[#69756f]">
-                                {product.category} · {product.tag}
-                              </p>
-                            </div>
-                          </div>
-                          <Badge variant={product.stock <= 10 ? "secondary" : "outline"}>
-                            {product.stock} stok
-                          </Badge>
-                        </div>
-                        <div className="mt-3 flex items-center justify-between">
-                          <strong className="text-sm text-[#0369a1]">{formatCurrency(product.price)}</strong>
-                          <div className="flex gap-2">
-                            <button
-                              onClick={() => openEditProduct(product)}
-                              className="flex h-9 items-center gap-2 rounded-lg border border-[#d7dfd4] px-3 text-sm font-semibold"
-                            >
-                              <Edit3 size={15} />
-                              Edit
-                            </button>
-                            <button
-                              onClick={() => setDeleteProduct(product)}
-                              className="flex h-9 items-center gap-2 rounded-lg border border-[#f1d1d1] px-3 text-sm font-semibold text-[#b42318]"
-                            >
-                              <Trash2 size={15} />
-                              Hapus
-                            </button>
-                          </div>
-                        </div>
-                      </article>
-                    ))}
-                  </div>
-
-                  <div className="hidden md:block">
-                    <Table className="min-w-[600px]">
-                      <TableHeader className="bg-muted/50 text-xs uppercase tracking-wide">
-                        <TableRow>
-                          <TableHead>Produk</TableHead>
-                          <TableHead>Kategori</TableHead>
-                          <TableHead>Harga</TableHead>
-                          <TableHead>Stok</TableHead>
-                          <TableHead>Label</TableHead>
-                          <TableHead className="text-right">Aksi</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
+                  {stockView === "products" ? (
+                    <>
+                      <div className="grid gap-3 p-4 md:hidden">
                         {managedProducts.map((product) => (
-                          <TableRow key={product.id}>
-                            <TableCell>
-                              <div className="flex items-center gap-3">
+                          <article key={product.id} className="rounded-lg border border-[#dde3da] bg-[#fbfcfa] p-3">
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="flex items-start gap-3">
                                 <div className="flex size-9 items-center justify-center rounded-lg bg-[#e0f2fe] text-[#075985]">
                                   {product.category === "FnB" ? <Utensils size={18} /> : <Package size={18} />}
                                 </div>
                                 <div>
                                   <p className="font-semibold">{product.name}</p>
-                                  <p className="text-xs text-[#69756f]">ID #{product.id}</p>
+                                  <p className="mt-0.5 text-xs text-[#69756f]">
+                                    {product.category} · {product.tag}
+                                  </p>
                                 </div>
                               </div>
-                            </TableCell>
-                            <TableCell>{product.category}</TableCell>
-                            <TableCell className="font-semibold text-primary">
-                              {formatCurrency(product.price)}
-                            </TableCell>
-                            <TableCell>
                               <Badge variant={product.stock <= 10 ? "secondary" : "outline"}>
                                 {product.stock} stok
                               </Badge>
-                            </TableCell>
-                            <TableCell className="text-muted-foreground">{product.tag}</TableCell>
-                            <TableCell>
-                              <div className="flex justify-end gap-2">
-                                <Button
-                                  variant="outline"
-                                  size="icon-lg"
+                            </div>
+                            <div className="mt-3 flex items-center justify-between">
+                              <strong className="text-sm text-[#0369a1]">{formatCurrency(product.price)}</strong>
+                              <div className="flex gap-2">
+                                <button
                                   onClick={() => openEditProduct(product)}
-                                  aria-label={`Edit ${product.name}`}
+                                  className="flex h-9 items-center gap-2 rounded-lg border border-[#d7dfd4] px-3 text-sm font-semibold"
                                 >
-                                  <Edit3 size={16} />
-                                </Button>
-                                <Button
-                                  variant="destructive"
-                                  size="icon-lg"
+                                  <Edit3 size={15} />
+                                  Edit
+                                </button>
+                                <button
                                   onClick={() => setDeleteProduct(product)}
-                                  aria-label={`Hapus ${product.name}`}
+                                  className="flex h-9 items-center gap-2 rounded-lg border border-[#f1d1d1] px-3 text-sm font-semibold text-[#b42318]"
                                 >
-                                  <Trash2 size={16} />
-                                </Button>
+                                  <Trash2 size={15} />
+                                  Hapus
+                                </button>
                               </div>
-                            </TableCell>
-                          </TableRow>
+                            </div>
+                          </article>
                         ))}
-                      </TableBody>
-                    </Table>
-                  </div>
+                      </div>
+
+                      <div className="hidden md:block">
+                        <Table className="min-w-[600px]">
+                          <TableHeader className="bg-muted/50 text-xs uppercase tracking-wide">
+                            <TableRow>
+                              <TableHead>Produk</TableHead>
+                              <TableHead>Kategori</TableHead>
+                              <TableHead>Harga</TableHead>
+                              <TableHead>Stok</TableHead>
+                              <TableHead>Label</TableHead>
+                              <TableHead className="text-right">Aksi</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {managedProducts.map((product) => (
+                              <TableRow key={product.id}>
+                                <TableCell>
+                                  <div className="flex items-center gap-3">
+                                    <div className="flex size-9 items-center justify-center rounded-lg bg-[#e0f2fe] text-[#075985]">
+                                      {product.category === "FnB" ? <Utensils size={18} /> : <Package size={18} />}
+                                    </div>
+                                    <div>
+                                      <p className="font-semibold">{product.name}</p>
+                                      <p className="text-xs text-[#69756f]">ID #{product.id}</p>
+                                    </div>
+                                  </div>
+                                </TableCell>
+                                <TableCell>{product.category}</TableCell>
+                                <TableCell className="font-semibold text-primary">
+                                  {formatCurrency(product.price)}
+                                </TableCell>
+                                <TableCell>
+                                  <Badge variant={product.stock <= 10 ? "secondary" : "outline"}>
+                                    {product.stock} stok
+                                  </Badge>
+                                </TableCell>
+                                <TableCell className="text-muted-foreground">{product.tag}</TableCell>
+                                <TableCell>
+                                  <div className="flex justify-end gap-2">
+                                    <Button
+                                      variant="outline"
+                                      size="icon-lg"
+                                      onClick={() => openEditProduct(product)}
+                                      aria-label={`Edit ${product.name}`}
+                                    >
+                                      <Edit3 size={16} />
+                                    </Button>
+                                    <Button
+                                      variant="destructive"
+                                      size="icon-lg"
+                                      onClick={() => setDeleteProduct(product)}
+                                      aria-label={`Hapus ${product.name}`}
+                                    >
+                                      <Trash2 size={16} />
+                                    </Button>
+                                  </div>
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    </>
+                  ) : stockView === "movements" ? (
+                    <div className="grid gap-4 p-4 lg:grid-cols-[360px_minmax(0,1fr)]">
+                      <div className="rounded-lg border border-[#dde3da] bg-[#fbfcfa] p-4">
+                        <h3 className="font-semibold">Input mutasi stok</h3>
+                        <p className="mt-1 text-sm text-[#69756f]">
+                          Gunakan untuk restock masuk atau penyesuaian manual.
+                        </p>
+                        <div className="mt-4 grid gap-4">
+                          <div className="grid gap-2">
+                            <Label htmlFor="stock-product">Produk</Label>
+                            <select
+                              id="stock-product"
+                              value={stockAdjustmentForm.productId}
+                              onChange={(event) =>
+                                setStockAdjustmentForm((form) => ({ ...form, productId: event.target.value }))
+                              }
+                              className="h-10 rounded-lg border border-input bg-background px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+                            >
+                              <option value="">Pilih produk</option>
+                              {products.map((product) => (
+                                <option key={product.id} value={product.id}>
+                                  {product.name} · stok {product.stock}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          <div className="grid gap-2">
+                            <Label htmlFor="stock-type">Tipe mutasi</Label>
+                            <select
+                              id="stock-type"
+                              value={stockAdjustmentForm.type}
+                              onChange={(event) =>
+                                setStockAdjustmentForm((form) => ({
+                                  ...form,
+                                  type: event.target.value as "Stok masuk" | "Penyesuaian",
+                                }))
+                              }
+                              className="h-10 rounded-lg border border-input bg-background px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+                            >
+                              <option>Stok masuk</option>
+                              <option>Penyesuaian</option>
+                            </select>
+                          </div>
+                          <div className="grid gap-2">
+                            <Label htmlFor="stock-qty">Jumlah</Label>
+                            <Input
+                              id="stock-qty"
+                              type="number"
+                              min={0}
+                              value={stockAdjustmentForm.qty}
+                              onChange={(event) =>
+                                setStockAdjustmentForm((form) => ({
+                                  ...form,
+                                  qty: Number(event.target.value),
+                                }))
+                              }
+                            />
+                          </div>
+                          <div className="grid gap-2">
+                            <Label htmlFor="stock-note">Catatan</Label>
+                            <Input
+                              id="stock-note"
+                              value={stockAdjustmentForm.note}
+                              onChange={(event) =>
+                                setStockAdjustmentForm((form) => ({ ...form, note: event.target.value }))
+                              }
+                              placeholder="Contoh: Restock supplier atau koreksi rak"
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="rounded-lg border border-[#dde3da] bg-white">
+                        <div className="border-b border-[#dde3da] p-4">
+                          <h3 className="font-semibold">Riwayat mutasi stok</h3>
+                          <p className="mt-1 text-sm text-[#69756f]">
+                            Setiap penjualan, restock, penyesuaian, dan opname akan tercatat di sini.
+                          </p>
+                        </div>
+                        <div className="grid gap-3 p-4">
+                          {stockMovements.length === 0 ? (
+                            <div className="rounded-lg bg-[#fbfcfa] p-4 text-sm text-[#69756f]">
+                              Belum ada mutasi stok tercatat.
+                            </div>
+                          ) : (
+                            stockMovements.map((movement) => (
+                              <article
+                                key={movement.id}
+                                className="rounded-lg border border-[#dde3da] bg-[#fbfcfa] p-3"
+                              >
+                                <div className="flex items-start justify-between gap-3">
+                                  <div>
+                                    <p className="font-semibold">{movement.productName}</p>
+                                    <p className="mt-0.5 text-xs text-[#69756f]">
+                                      {movement.type} · {movement.createdAt}
+                                    </p>
+                                  </div>
+                                  <Badge
+                                    variant={movement.qtyChange > 0 ? "default" : "secondary"}
+                                  >
+                                    {movement.qtyChange > 0 ? "+" : ""}
+                                    {movement.qtyChange}
+                                  </Badge>
+                                </div>
+                                <div className="mt-3 grid gap-2 text-sm">
+                                  <div className="flex justify-between">
+                                    <span className="text-[#69756f]">Stok</span>
+                                    <strong>
+                                      {movement.previousStock} ke {movement.nextStock}
+                                    </strong>
+                                  </div>
+                                  <div className="flex justify-between gap-3">
+                                    <span className="text-[#69756f]">Catatan</span>
+                                    <span className="text-right">{movement.note}</span>
+                                  </div>
+                                </div>
+                              </article>
+                            ))
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="p-4">
+                      <div className="rounded-lg border border-[#dde3da] bg-white">
+                        <div className="border-b border-[#dde3da] p-4">
+                          <h3 className="font-semibold">Stok opname</h3>
+                          <p className="mt-1 text-sm text-[#69756f]">
+                            Bandingkan stok sistem dengan stok fisik, lalu simpan penyesuaian per produk.
+                          </p>
+                        </div>
+                        <div className="grid gap-3 p-4 md:hidden">
+                          {products.map((product) => {
+                            const opnameRow = opnameInputs[String(product.id)] ?? {
+                              actualStock: String(product.stock),
+                              note: "",
+                            };
+                            const diff = Number(opnameRow.actualStock || product.stock) - product.stock;
+
+                            return (
+                              <article key={product.id} className="rounded-lg border border-[#dde3da] bg-[#fbfcfa] p-3">
+                                <div className="flex items-start justify-between gap-3">
+                                  <div>
+                                    <p className="font-semibold">{product.name}</p>
+                                    <p className="mt-0.5 text-xs text-[#69756f]">{product.category}</p>
+                                  </div>
+                                  <Badge variant={diff === 0 ? "outline" : diff > 0 ? "default" : "secondary"}>
+                                    {diff > 0 ? "+" : ""}
+                                    {diff}
+                                  </Badge>
+                                </div>
+                                <div className="mt-3 grid gap-3">
+                                  <div className="flex justify-between text-sm">
+                                    <span className="text-[#69756f]">Stok sistem</span>
+                                    <strong>{product.stock}</strong>
+                                  </div>
+                                  <div className="grid gap-2">
+                                    <Label htmlFor={`opname-actual-${product.id}`}>Stok fisik</Label>
+                                    <Input
+                                      id={`opname-actual-${product.id}`}
+                                      type="number"
+                                      value={opnameRow.actualStock}
+                                      onChange={(event) =>
+                                        setOpnameInputs((items) => ({
+                                          ...items,
+                                          [product.id]: {
+                                            ...opnameRow,
+                                            actualStock: event.target.value,
+                                          },
+                                        }))
+                                      }
+                                    />
+                                  </div>
+                                  <div className="grid gap-2">
+                                    <Label htmlFor={`opname-note-${product.id}`}>Catatan</Label>
+                                    <Input
+                                      id={`opname-note-${product.id}`}
+                                      value={opnameRow.note}
+                                      onChange={(event) =>
+                                        setOpnameInputs((items) => ({
+                                          ...items,
+                                          [product.id]: {
+                                            ...opnameRow,
+                                            note: event.target.value,
+                                          },
+                                        }))
+                                      }
+                                      placeholder="Contoh: Selisih hitung rak"
+                                    />
+                                  </div>
+                                </div>
+                              </article>
+                            );
+                          })}
+                        </div>
+                        <div className="hidden md:block">
+                          <Table className="min-w-[860px]">
+                            <TableHeader className="bg-muted/50 text-xs uppercase tracking-wide">
+                              <TableRow>
+                                <TableHead>Produk</TableHead>
+                                <TableHead>Stok sistem</TableHead>
+                                <TableHead>Stok fisik</TableHead>
+                                <TableHead>Selisih</TableHead>
+                                <TableHead>Catatan</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {products.map((product) => {
+                                const opnameRow = opnameInputs[String(product.id)] ?? {
+                                  actualStock: String(product.stock),
+                                  note: "",
+                                };
+                                const diff = Number(opnameRow.actualStock || product.stock) - product.stock;
+
+                                return (
+                                  <TableRow key={product.id}>
+                                    <TableCell>
+                                      <div>
+                                        <p className="font-semibold">{product.name}</p>
+                                        <p className="text-xs text-[#69756f]">{product.category}</p>
+                                      </div>
+                                    </TableCell>
+                                    <TableCell>{product.stock}</TableCell>
+                                    <TableCell>
+                                      <Input
+                                        type="number"
+                                        value={opnameRow.actualStock}
+                                        onChange={(event) =>
+                                          setOpnameInputs((items) => ({
+                                            ...items,
+                                            [product.id]: {
+                                              ...opnameRow,
+                                              actualStock: event.target.value,
+                                            },
+                                          }))
+                                        }
+                                        className="h-9 min-h-9"
+                                      />
+                                    </TableCell>
+                                    <TableCell>
+                                      <Badge variant={diff === 0 ? "outline" : diff > 0 ? "default" : "secondary"}>
+                                        {diff > 0 ? "+" : ""}
+                                        {diff}
+                                      </Badge>
+                                    </TableCell>
+                                    <TableCell>
+                                      <Input
+                                        value={opnameRow.note}
+                                        onChange={(event) =>
+                                          setOpnameInputs((items) => ({
+                                            ...items,
+                                            [product.id]: {
+                                              ...opnameRow,
+                                              note: event.target.value,
+                                            },
+                                          }))
+                                        }
+                                        placeholder="Catatan selisih"
+                                        className="h-9 min-h-9"
+                                      />
+                                    </TableCell>
+                                  </TableRow>
+                                );
+                              })}
+                            </TableBody>
+                          </Table>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+	                </section>
+	              </>
+	            ) : activeMenu === "Bahan" ? (
+	              <>
+	                <section className="mt-6 grid gap-3 md:grid-cols-3">
+	                  {[
+	                    ["Total bahan", `${ingredients.length}`, "Bahan aktif untuk racikan menu"],
+	                    ["Bahan menipis", `${lowIngredientCount}`, "Perlu restock segera"],
+	                    [
+	                      "Dipakai di menu",
+	                      `${ingredients.filter((item) => (ingredientUsageMap[item.id] ?? []).length > 0).length}`,
+	                      "Sudah terhubung ke resep produk",
+	                    ],
+	                  ].map(([label, value, note]) => (
+	                    <div key={label} className="rounded-lg border border-[#dde3da] bg-white p-4">
+	                      <p className="text-sm font-medium text-[#69756f]">{label}</p>
+	                      <p className="mt-2 text-2xl font-semibold tracking-tight">{value}</p>
+	                      <p className="mt-1 text-xs font-medium text-[#0369a1]">{note}</p>
+	                    </div>
+	                  ))}
+	                </section>
+
+	                <section className="mt-6 rounded-lg border border-[#dde3da] bg-white">
+	                  <div className="flex flex-col gap-3 border-b border-[#dde3da] p-4 md:flex-row md:items-center md:justify-between">
+	                    <div>
+	                      <h2 className="font-semibold">Data bahan utama</h2>
+	                      <p className="mt-1 text-sm text-[#69756f]">
+	                        Kelola bahan baku yang dipakai untuk meracik menu seperti es teh, kopi, dan minuman lainnya.
+	                      </p>
+	                    </div>
+	                    <div className="relative md:w-72">
+	                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8a968f]" size={18} />
+	                      <input
+	                        value={ingredientQuery}
+	                        onChange={(event) => {
+	                          setIngredientQuery(event.target.value);
+	                          setIngredientPage(1);
+	                        }}
+	                        className="h-10 w-full rounded-lg border border-[#d7dfd4] bg-[#fbfcfa] pl-10 pr-3 text-sm outline-none focus:border-[#0369a1]"
+	                        placeholder="Cari bahan, unit, atau menu"
+	                      />
+	                    </div>
+	                  </div>
+
+	                  <div className="grid gap-3 p-4 md:hidden">
+	                    {paginatedIngredients.map((ingredient) => (
+	                      <article key={ingredient.id} className="rounded-lg border border-[#dde3da] bg-[#fbfcfa] p-3">
+	                        <div className="flex items-start justify-between gap-3">
+	                          <div>
+	                            <p className="font-semibold">{ingredient.name}</p>
+	                            <p className="mt-0.5 text-xs text-[#69756f]">
+	                              {ingredient.stock} {ingredient.unit} · min {ingredient.minStock} {ingredient.unit}
+	                            </p>
+	                          </div>
+	                          <Badge
+	                            variant={ingredient.stock <= ingredient.minStock ? "secondary" : "outline"}
+	                          >
+	                            {formatCurrency(ingredient.costPerUnit)}
+	                          </Badge>
+	                        </div>
+	                        <p className="mt-3 text-sm text-[#69756f]">
+	                          Dipakai di: {(ingredientUsageMap[ingredient.id] ?? []).join(", ") || "Belum dipakai di menu"}
+	                        </p>
+	                        <div className="mt-3 flex justify-end gap-2">
+	                          <Button variant="outline" size="sm" onClick={() => openEditIngredient(ingredient)}>
+	                            <Edit3 data-icon="inline-start" />
+	                            Edit
+	                          </Button>
+	                          <Button variant="destructive" size="sm" onClick={() => setDeleteIngredient(ingredient)}>
+	                            <Trash2 data-icon="inline-start" />
+	                            Hapus
+	                          </Button>
+	                        </div>
+	                      </article>
+	                    ))}
+	                  </div>
+
+	                  <div className="hidden md:block">
+	                    <Table className="min-w-[820px]">
+	                      <TableHeader className="bg-muted/50 text-xs uppercase tracking-wide">
+	                        <TableRow>
+	                          <TableHead>Bahan</TableHead>
+	                          <TableHead>Stok</TableHead>
+	                          <TableHead>Minimum</TableHead>
+	                          <TableHead>Biaya / unit</TableHead>
+	                          <TableHead>Dipakai di menu</TableHead>
+	                          <TableHead className="text-right">Aksi</TableHead>
+	                        </TableRow>
+	                      </TableHeader>
+	                      <TableBody>
+	                        {paginatedIngredients.map((ingredient) => (
+	                          <TableRow key={ingredient.id}>
+	                            <TableCell>
+	                              <div>
+	                                <p className="font-semibold">{ingredient.name}</p>
+	                                <p className="text-xs text-[#69756f]">ID #{ingredient.id}</p>
+	                              </div>
+	                            </TableCell>
+	                            <TableCell>
+	                              <Badge
+	                                variant={ingredient.stock <= ingredient.minStock ? "secondary" : "outline"}
+	                              >
+	                                {ingredient.stock} {ingredient.unit}
+	                              </Badge>
+	                            </TableCell>
+	                            <TableCell>{ingredient.minStock} {ingredient.unit}</TableCell>
+	                            <TableCell className="font-semibold text-primary">
+	                              {formatCurrency(ingredient.costPerUnit)}
+	                            </TableCell>
+	                            <TableCell className="max-w-[280px] whitespace-normal text-[#69756f]">
+	                              {(ingredientUsageMap[ingredient.id] ?? []).join(", ") || "Belum dipakai di menu"}
+	                            </TableCell>
+	                            <TableCell>
+	                              <div className="flex justify-end gap-2">
+	                                <Button
+	                                  variant="outline"
+	                                  size="icon-lg"
+	                                  onClick={() => openEditIngredient(ingredient)}
+	                                  aria-label={`Edit ${ingredient.name}`}
+	                                >
+	                                  <Edit3 size={16} />
+	                                </Button>
+	                                <Button
+	                                  variant="destructive"
+	                                  size="icon-lg"
+	                                  onClick={() => setDeleteIngredient(ingredient)}
+	                                  aria-label={`Hapus ${ingredient.name}`}
+	                                >
+	                                  <Trash2 size={16} />
+	                                </Button>
+	                              </div>
+	                            </TableCell>
+	                          </TableRow>
+	                        ))}
+	                      </TableBody>
+	                    </Table>
+	                  </div>
+
+	                  <TablePagination
+	                    currentPage={currentIngredientPage}
+	                    totalPages={ingredientPageCount}
+	                    totalItems={filteredIngredients.length}
+	                    label={`${filteredIngredients.length} bahan`}
+	                    onPageChange={setIngredientPage}
+	                  />
+	                </section>
+	              </>
+	            ) : activeMenu === "Pengeluaran" ? (
+	              <>
+	                <section className="mt-6 grid gap-3 md:grid-cols-3">
+	                  {[
+	                    [
+	                      "Total pengeluaran",
+	                      formatCurrency(expenses.reduce((sum, item) => sum + item.amount, 0)),
+	                      "Akumulasi seluruh catatan pengeluaran",
+	                    ],
+	                    [
+	                      "Tercatat bulan ini",
+	                      `${expenses.filter((item) => item.status === "Tercatat").length}`,
+	                      "Pengeluaran siap masuk laporan",
+	                    ],
+	                    [
+	                      "Draft biaya",
+	                      `${expenses.filter((item) => item.status === "Draft").length}`,
+	                      "Masih menunggu finalisasi",
+	                    ],
+	                  ].map(([label, value, note]) => (
+	                    <div key={label} className="rounded-lg border border-[#dde3da] bg-white p-4">
+	                      <p className="text-sm font-medium text-[#69756f]">{label}</p>
+	                      <p className="mt-2 text-2xl font-semibold tracking-tight">{value}</p>
+	                      <p className="mt-1 text-xs font-medium text-[#0369a1]">{note}</p>
+	                    </div>
+	                  ))}
+	                </section>
+
+	                <section className="mt-6 rounded-lg border border-[#dde3da] bg-white">
+	                  <div className="flex flex-col gap-3 border-b border-[#dde3da] p-4 md:flex-row md:items-center md:justify-between">
+	                    <div>
+	                      <h2 className="font-semibold">Catatan pengeluaran outlet</h2>
+	                      <p className="mt-1 text-sm text-[#69756f]">
+	                        Rekam biaya operasional, bahan baku, servis alat, dan pengeluaran harian lainnya.
+	                      </p>
+	                    </div>
+	                    <div className="relative md:w-72">
+	                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8a968f]" size={18} />
+	                      <input
+	                        value={expenseQuery}
+	                        onChange={(event) => {
+	                          setExpenseQuery(event.target.value);
+	                          setExpensePage(1);
+	                        }}
+	                        className="h-10 w-full rounded-lg border border-[#d7dfd4] bg-[#fbfcfa] pl-10 pr-3 text-sm outline-none focus:border-[#0369a1]"
+	                        placeholder="Cari judul, kategori, atau metode"
+	                      />
+	                    </div>
+	                  </div>
+
+	                  <div className="grid gap-3 p-4 md:hidden">
+	                    {paginatedExpenses.map((expense) => (
+	                      <article key={expense.id} className="rounded-lg border border-[#dde3da] bg-[#fbfcfa] p-3">
+	                        <div className="flex items-start justify-between gap-3">
+	                          <div>
+	                            <p className="font-semibold">{expense.title}</p>
+	                            <p className="mt-0.5 text-xs text-[#69756f]">
+	                              {expense.category} · {expense.date}
+	                            </p>
+	                          </div>
+	                          <Badge variant={expense.status === "Tercatat" ? "default" : "secondary"}>
+	                            {expense.status}
+	                          </Badge>
+	                        </div>
+	                        <div className="mt-3 grid gap-2 text-sm">
+	                          <div className="flex justify-between">
+	                            <span className="text-[#69756f]">Nominal</span>
+	                            <strong>{formatCurrency(expense.amount)}</strong>
+	                          </div>
+	                          <div className="flex justify-between">
+	                            <span className="text-[#69756f]">Metode</span>
+	                            <strong>{expense.paymentMethod}</strong>
+	                          </div>
+	                        </div>
+	                        <p className="mt-3 text-sm text-[#69756f]">{expense.note || "Tanpa catatan"}</p>
+	                        <div className="mt-3 flex justify-end gap-2">
+	                          <Button variant="outline" size="sm" onClick={() => openEditExpense(expense)}>
+	                            <Edit3 data-icon="inline-start" />
+	                            Edit
+	                          </Button>
+	                          <Button variant="destructive" size="sm" onClick={() => setDeleteExpense(expense)}>
+	                            <Trash2 data-icon="inline-start" />
+	                            Hapus
+	                          </Button>
+	                        </div>
+	                      </article>
+	                    ))}
+	                  </div>
+
+	                  <div className="hidden md:block">
+	                    <Table className="min-w-[860px]">
+	                      <TableHeader className="bg-muted/50 text-xs uppercase tracking-wide">
+	                        <TableRow>
+	                          <TableHead>Tanggal</TableHead>
+	                          <TableHead>Pengeluaran</TableHead>
+	                          <TableHead>Kategori</TableHead>
+	                          <TableHead>Metode</TableHead>
+	                          <TableHead>Nominal</TableHead>
+	                          <TableHead>Status</TableHead>
+	                          <TableHead className="text-right">Aksi</TableHead>
+	                        </TableRow>
+	                      </TableHeader>
+	                      <TableBody>
+	                        {paginatedExpenses.map((expense) => (
+	                          <TableRow key={expense.id}>
+	                            <TableCell>{expense.date}</TableCell>
+	                            <TableCell>
+	                              <div>
+	                                <p className="font-semibold">{expense.title}</p>
+	                                <p className="text-xs text-[#69756f]">{expense.note || "Tanpa catatan"}</p>
+	                              </div>
+	                            </TableCell>
+	                            <TableCell>{expense.category}</TableCell>
+	                            <TableCell>{expense.paymentMethod}</TableCell>
+	                            <TableCell className="font-semibold text-primary">
+	                              {formatCurrency(expense.amount)}
+	                            </TableCell>
+	                            <TableCell>
+	                              <Badge variant={expense.status === "Tercatat" ? "default" : "secondary"}>
+	                                {expense.status}
+	                              </Badge>
+	                            </TableCell>
+	                            <TableCell>
+	                              <div className="flex justify-end gap-2">
+	                                <Button
+	                                  variant="outline"
+	                                  size="icon-lg"
+	                                  onClick={() => openEditExpense(expense)}
+	                                  aria-label={`Edit ${expense.title}`}
+	                                >
+	                                  <Edit3 size={16} />
+	                                </Button>
+	                                <Button
+	                                  variant="destructive"
+	                                  size="icon-lg"
+	                                  onClick={() => setDeleteExpense(expense)}
+	                                  aria-label={`Hapus ${expense.title}`}
+	                                >
+	                                  <Trash2 size={16} />
+	                                </Button>
+	                              </div>
+	                            </TableCell>
+	                          </TableRow>
+	                        ))}
+	                      </TableBody>
+	                    </Table>
+	                  </div>
+
+	                  <TablePagination
+	                    currentPage={currentExpensePage}
+	                    totalPages={expensePageCount}
+	                    totalItems={filteredExpenses.length}
+	                    label={`${filteredExpenses.length} pengeluaran`}
+	                    onPageChange={setExpensePage}
+	                  />
 	                </section>
 	              </>
 	            ) : activeMenu === "Promo" ? (
@@ -1713,6 +3096,9 @@ export default function MavaposShell({
 	                            <p className="mt-0.5 text-xs text-[#69756f]">
 	                              {promo.type} · {promo.target}
 	                            </p>
+	                            <p className="mt-1 text-[11px] font-semibold tracking-wide text-[#075985]">
+	                              {promo.code}
+	                            </p>
 	                          </div>
 	                          <Badge variant={promo.status === "Aktif" ? "default" : "secondary"}>
 	                            {promo.status}
@@ -1747,6 +3133,7 @@ export default function MavaposShell({
 	                      <TableHeader className="bg-muted/50 text-xs uppercase tracking-wide">
 	                        <TableRow>
 	                          <TableHead>Promo</TableHead>
+	                          <TableHead>Kode</TableHead>
 	                          <TableHead>Tipe</TableHead>
 	                          <TableHead>Target</TableHead>
 	                          <TableHead>Nilai</TableHead>
@@ -1769,6 +3156,7 @@ export default function MavaposShell({
 	                                </div>
 	                              </div>
 	                            </TableCell>
+	                            <TableCell className="font-semibold text-[#075985]">{promo.code}</TableCell>
 	                            <TableCell>{promo.type}</TableCell>
 	                            <TableCell>{promo.target}</TableCell>
 	                            <TableCell className="font-semibold text-primary">{promo.value}</TableCell>
@@ -1934,13 +3322,13 @@ export default function MavaposShell({
 	                  </div>
 	                </section>
 		              </>
-	            ) : activeMenu === "Paket SaaS" ? (
+	            ) : activeMenu === "Laporan" ? (
 	              <>
 	                <section className="mt-6 grid gap-3 md:grid-cols-3">
 	                  {[
-	                    ["Paket aktif", "Core", "Rp169.000/bulan"],
-	                    ["Limit produk", `${products.length} / 30`, "Untuk paket Core"],
-	                    ["Limit staf", `${staffMembers.length} / 2`, "Kasir aktif outlet"],
+	                    ["Penjualan hari ini", formatCurrency(1425000), "38 transaksi selesai"],
+	                    ["Rata-rata transaksi", formatCurrency(37500), "Naik 8% dari kemarin"],
+	                    ["Produk terjual", "96 item", "FnB menyumbang 72%"],
 	                  ].map(([label, value, note]) => (
 	                    <div key={label} className="rounded-lg border border-[#dde3da] bg-white p-4">
 	                      <p className="text-sm font-medium text-[#69756f]">{label}</p>
@@ -1950,64 +3338,52 @@ export default function MavaposShell({
 	                  ))}
 	                </section>
 
-	                <section className="mt-6 grid gap-4 lg:grid-cols-2">
-	                  {saasPlans.map((plan) => (
-	                    <article key={plan.name} className="rounded-lg border border-[#dde3da] bg-white p-5">
-	                      <div className="flex items-start justify-between gap-3">
-	                        <div>
-	                          <div className="flex items-center gap-2">
-	                            <h2 className="text-xl font-semibold">{plan.name}</h2>
-	                            <Badge variant={plan.status === "Aktif" ? "default" : "outline"}>
-	                              {plan.status}
-	                            </Badge>
-	                          </div>
-	                          <p className="mt-2 text-sm leading-6 text-[#69756f]">{plan.description}</p>
-	                        </div>
-	                        <Sparkles className="text-[#0369a1]" size={22} />
-	                      </div>
-	                      <div className="mt-5">
-	                        <span className="text-3xl font-semibold tracking-tight">{plan.price}</span>
-	                        <span className="ml-1 text-sm font-medium text-[#69756f]">/bulan</span>
-	                      </div>
-	                      <div className="mt-5 grid gap-3">
-	                        {plan.features.map((feature) => (
-	                          <div key={feature} className="flex items-center gap-2 text-sm">
-	                            <span className="flex size-5 items-center justify-center rounded-full bg-[#e0f2fe] text-[#075985]">
-	                              <Check size={13} />
-	                            </span>
-	                            <span>{feature}</span>
-	                          </div>
-	                        ))}
-	                      </div>
-	                      <Button className="mt-6 w-full" variant={plan.status === "Aktif" ? "outline" : "default"}>
-	                        {plan.status === "Aktif" ? "Paket sedang aktif" : "Upgrade ke Basic"}
-	                      </Button>
-	                    </article>
-	                  ))}
-	                </section>
-
-	                <section className="mt-6 rounded-lg border border-[#dde3da] bg-white p-4">
-	                  <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-	                    <div>
-	                      <h2 className="font-semibold">Ringkasan tagihan</h2>
+	                <section className="mt-6 grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+	                  <div className="rounded-lg border border-[#dde3da] bg-white">
+	                    <div className="border-b border-[#dde3da] p-4">
+	                      <h2 className="font-semibold">Ringkasan penjualan</h2>
 	                      <p className="mt-1 text-sm text-[#69756f]">
-	                        Tagihan berikutnya untuk paket Core akan dibuat otomatis.
+	                        Pantau omzet, transaksi, dan performa kategori outlet.
 	                      </p>
 	                    </div>
-	                    <Badge variant="outline">Jatuh tempo 12 Mei 2026</Badge>
+	                    <div className="grid gap-3 p-4">
+	                      {[
+	                        ["Tunai", formatCurrency(820000), "22 transaksi"],
+	                        ["QRIS", formatCurrency(605000), "16 transaksi"],
+	                        ["Promo digunakan", formatCurrency(78000), "12 transaksi"],
+	                      ].map(([label, value, note]) => (
+	                        <div
+	                          key={label}
+	                          className="flex items-center justify-between rounded-lg bg-[#fbfcfa] p-3"
+	                        >
+	                          <div>
+	                            <p className="font-semibold">{label}</p>
+	                            <p className="mt-1 text-xs text-[#69756f]">{note}</p>
+	                          </div>
+	                          <strong className="text-[#0369a1]">{value}</strong>
+	                        </div>
+	                      ))}
+	                    </div>
 	                  </div>
-	                  <div className="mt-4 grid gap-3 md:grid-cols-3">
-	                    {[
-	                      ["Subtotal", "Rp169.000"],
-	                      ["PPN", "Rp18.590"],
-	                      ["Total estimasi", "Rp187.590"],
-	                    ].map(([label, value]) => (
-	                      <div key={label} className="rounded-lg bg-[#fbfcfa] p-3">
-	                        <p className="text-sm text-[#69756f]">{label}</p>
-	                        <p className="mt-1 font-semibold">{value}</p>
-	                      </div>
-	                    ))}
-	                  </div>
+
+	                  <aside className="rounded-lg border border-[#dde3da] bg-white p-4">
+	                    <h2 className="font-semibold">Produk terlaris</h2>
+	                    <div className="mt-4 grid gap-3">
+	                      {products.slice(0, 4).map((product, index) => (
+	                        <div key={product.id} className="flex items-center justify-between gap-3">
+	                          <div className="min-w-0">
+	                            <p className="truncate text-sm font-semibold">{product.name}</p>
+	                            <p className="mt-0.5 text-xs text-[#69756f]">
+	                              {product.category} · {product.tag}
+	                            </p>
+	                          </div>
+	                          <Badge variant={index === 0 ? "default" : "outline"}>
+	                            {24 - index * 4} terjual
+	                          </Badge>
+	                        </div>
+	                      ))}
+	                    </div>
+	                  </aside>
 	                </section>
 	              </>
 	            ) : activeMenu === "Pengaturan" ? (
@@ -2061,7 +3437,16 @@ export default function MavaposShell({
 	                        <Label htmlFor="setting-address">Alamat outlet</Label>
 	                        <Input id="setting-address" defaultValue="Jl. Mawar No. 18, Makassar" />
 	                      </div>
-	                      <Button className="w-fit">
+	                      <Button
+	                        className="w-fit"
+	                        onClick={() =>
+	                          showToast(
+	                            "success",
+	                            "Profil outlet disimpan",
+	                            "Pengaturan outlet berhasil diperbarui.",
+	                          )
+	                        }
+	                      >
 	                        <Store data-icon="inline-start" />
 	                        Simpan profil outlet
 	                      </Button>
@@ -2106,51 +3491,167 @@ export default function MavaposShell({
 	                    </div>
 	                  </aside>
 	                </section>
+
+	                <section className="mt-6 grid gap-3 md:grid-cols-3">
+	                  {[
+	                    ["Paket aktif", "Core", "Rp169.000/bulan"],
+	                    ["Limit produk", `${products.length} / 30`, "Untuk paket Core"],
+	                    ["Limit staf", `${staffMembers.length} / 2`, "Kasir aktif outlet"],
+	                  ].map(([label, value, note]) => (
+	                    <div key={label} className="rounded-lg border border-[#dde3da] bg-white p-4">
+	                      <p className="text-sm font-medium text-[#69756f]">{label}</p>
+	                      <p className="mt-2 text-2xl font-semibold tracking-tight">{value}</p>
+	                      <p className="mt-1 text-xs font-medium text-[#0369a1]">{note}</p>
+	                    </div>
+	                  ))}
+	                </section>
+
+	                <section className="mt-6 grid gap-4 lg:grid-cols-2">
+	                  {saasPlans.map((plan) => (
+	                    <article key={plan.name} className="rounded-lg border border-[#dde3da] bg-white p-5">
+	                      <div className="flex items-start justify-between gap-3">
+	                        <div>
+	                          <div className="flex items-center gap-2">
+	                            <h2 className="text-xl font-semibold">{plan.name}</h2>
+	                            <Badge variant={plan.status === "Aktif" ? "default" : "outline"}>
+	                              {plan.status}
+	                            </Badge>
+	                          </div>
+	                          <p className="mt-2 text-sm leading-6 text-[#69756f]">{plan.description}</p>
+	                        </div>
+	                        <Sparkles className="text-[#0369a1]" size={22} />
+	                      </div>
+	                      <div className="mt-5">
+	                        <span className="text-3xl font-semibold tracking-tight">{plan.price}</span>
+	                        <span className="ml-1 text-sm font-medium text-[#69756f]">/bulan</span>
+	                      </div>
+	                      <div className="mt-5 grid gap-3">
+	                        {plan.features.map((feature) => (
+	                          <div key={feature} className="flex items-center gap-2 text-sm">
+	                            <span className="flex size-5 items-center justify-center rounded-full bg-[#e0f2fe] text-[#075985]">
+	                              <Check size={13} />
+	                            </span>
+	                            <span>{feature}</span>
+	                          </div>
+	                        ))}
+	                      </div>
+	                      <Button
+	                        className="mt-6 w-full"
+	                        variant={plan.status === "Aktif" ? "outline" : "default"}
+	                        onClick={() =>
+	                          showToast(
+	                            plan.status === "Aktif" ? "info" : "success",
+	                            plan.status === "Aktif" ? "Paket sudah aktif" : "Permintaan upgrade diterima",
+	                            plan.status === "Aktif"
+	                              ? "Outlet sudah menggunakan paket Core."
+	                              : "Tim MAVA akan memproses upgrade paket Basic.",
+	                          )
+	                        }
+	                      >
+	                        {plan.status === "Aktif" ? "Paket sedang aktif" : "Upgrade ke Basic"}
+	                      </Button>
+	                    </article>
+	                  ))}
+	                </section>
+
+	                <section className="mt-6 rounded-lg border border-[#dde3da] bg-white p-4">
+	                  <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+	                    <div>
+	                      <h2 className="font-semibold">Ringkasan tagihan</h2>
+	                      <p className="mt-1 text-sm text-[#69756f]">
+	                        Tagihan berikutnya untuk paket Core akan dibuat otomatis.
+	                      </p>
+	                    </div>
+	                    <Badge variant="outline">Jatuh tempo 12 Mei 2026</Badge>
+	                  </div>
+	                  <div className="mt-4 grid gap-3 md:grid-cols-3">
+	                    {[
+	                      ["Subtotal", "Rp169.000"],
+	                      ["PPN", "Rp18.590"],
+	                      ["Total estimasi", "Rp187.590"],
+	                    ].map(([label, value]) => (
+	                      <div key={label} className="rounded-lg bg-[#fbfcfa] p-3">
+	                        <p className="text-sm text-[#69756f]">{label}</p>
+	                        <p className="mt-1 font-semibold">{value}</p>
+	                      </div>
+	                    ))}
+	                  </div>
+	                </section>
 	              </>
 	            ) : (
               <>
-	                <section
-	                  className="mt-6 overflow-hidden rounded-lg border border-[#dde3da] bg-white"
-	                  aria-label="Carousel promo aktif"
-	                >
-	                  <div
-	                    className="relative min-h-56 bg-cover bg-center transition-all duration-500"
-	                    style={{
-	                      backgroundImage: `linear-gradient(90deg, rgba(3, 105, 161, 0.92), rgba(3, 105, 161, 0.5), rgba(3, 105, 161, 0.12)), url(${promoSlides[promoIndex].image})`,
-	                    }}
+	                {hasBasicAccess && (
+	                  <section
+	                    className="mt-6 overflow-hidden rounded-lg border border-[#dde3da] bg-white"
+	                    aria-label="Carousel promo aktif"
 	                  >
-	                    <div className="flex min-h-56 max-w-2xl flex-col justify-between p-5 text-white">
-	                      <div>
-	                        <p className="text-sm font-semibold opacity-90">Promo aktif</p>
-	                        <h2 className="mt-2 text-2xl font-semibold tracking-tight">
-	                          {promoSlides[promoIndex].title}
-	                        </h2>
-	                        <p className="mt-3 max-w-xl text-sm leading-6 text-white/90">
-	                          {promoSlides[promoIndex].description}
-	                        </p>
-	                      </div>
-	                      <div className="mt-8 flex items-center justify-between gap-3">
-	                        <Badge className="bg-white text-[#075985] hover:bg-white">
-	                          {promoSlides[promoIndex].cta}
-	                        </Badge>
-	                        <div className="flex gap-2">
-	                          {promoSlides.map((slide, index) => (
-	                            <button
-	                              key={slide.title}
-	                              onClick={() => setPromoIndex(index)}
-	                              className={`h-2.5 rounded-full transition-all ${
-	                                promoIndex === index ? "w-8 bg-white" : "w-2.5 bg-white/50"
-	                              }`}
-	                              aria-label={`Lihat promo ${index + 1}`}
-	                            />
-	                          ))}
+	                    <div
+	                      className="relative min-h-56 bg-cover bg-center transition-all duration-500"
+	                      style={{
+	                        backgroundImage: `linear-gradient(90deg, rgba(3, 105, 161, 0.92), rgba(3, 105, 161, 0.5), rgba(3, 105, 161, 0.12)), url(${currentPromoImage})`,
+	                      }}
+	                    >
+	                      <div className="flex min-h-56 flex-col justify-between p-5 text-white">
+	                        <div>
+	                          <div className="flex flex-wrap items-center justify-between gap-3">
+	                            <p className="text-sm font-semibold opacity-90">Promo aktif</p>
+	                            {canManageOutlet && (
+	                              <div className="flex gap-2">
+	                                <button
+	                                  onClick={openCreatePromo}
+	                                  className="flex h-8 items-center gap-1.5 rounded-md bg-white px-2.5 text-xs font-semibold text-[#075985]"
+	                                >
+	                                  <Plus size={14} />
+	                                  Tambah
+	                                </button>
+	                                {currentPromo && (
+	                                  <button
+	                                    onClick={() => setDeletePromo(currentPromo)}
+	                                    className="flex h-8 items-center gap-1.5 rounded-md bg-white/15 px-2.5 text-xs font-semibold text-white ring-1 ring-white/35"
+	                                  >
+	                                    <Trash2 size={14} />
+	                                    Hapus
+	                                  </button>
+	                                )}
+	                              </div>
+	                            )}
+	                          </div>
+	                          <div className="max-w-2xl">
+	                            <h2 className="mt-2 text-2xl font-semibold tracking-tight">
+	                              {currentPromo?.name ?? "Belum ada promo aktif"}
+	                            </h2>
+	                            <p className="mt-3 max-w-xl text-sm leading-6 text-white/90">
+	                              {currentPromo
+	                                ? `${currentPromo.type} untuk ${currentPromo.target} senilai ${currentPromo.value}. Berlaku ${currentPromo.period}.`
+	                                : "Tambahkan promo agar tampil di carousel kasir dan bisa dipilih sebagai campaign outlet."}
+	                            </p>
+	                          </div>
+	                        </div>
+	                        <div className="mt-8 flex items-center justify-between gap-3">
+	                          <Badge className="bg-white text-[#075985] hover:bg-white">
+	                            {currentPromo?.status ?? "Kosong"}
+	                          </Badge>
+	                          {activePromos.length > 1 && (
+	                          <div className="flex items-center gap-1.5">
+	                            {activePromos.map((promo, index) => (
+	                              <button
+	                                key={promo.id}
+	                                onClick={() => setPromoIndex(index)}
+	                                className={`!h-1.5 !min-h-0 rounded-full transition-all ${
+	                                  currentPromoIndex === index ? "w-5 bg-white" : "w-1.5 bg-white/50"
+	                                }`}
+	                                aria-label={`Lihat promo ${index + 1}`}
+	                              />
+	                            ))}
+	                          </div>
+	                          )}
 	                        </div>
 	                      </div>
 	                    </div>
-	                  </div>
-	                </section>
+	                  </section>
+	                )}
 
-                <section className="mt-6 rounded-lg border border-[#dde3da] bg-white p-4">
+                <section className={`${hasBasicAccess ? "mt-6" : "mt-3"} rounded-lg border border-[#dde3da] bg-white p-4`}>
                   <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                     <div className="relative max-w-md flex-1">
                       <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8a968f]" size={18} />
@@ -2183,10 +3684,25 @@ export default function MavaposShell({
 	                        onClick={() => addToCart(product)}
 		                        className="relative h-[140px] min-h-[140px] overflow-hidden rounded-lg border border-[#dde3da] bg-[#fbfcfa] text-left transition hover:border-[#0369a1] hover:bg-[#f0f9ff]"
 	                      >
-	                        <div
-	                          className="absolute inset-0 bg-cover bg-center"
-	                          style={{ backgroundImage: `url(${product.image})` }}
-	                        />
+	                        {isDefaultProductImage(product.image) ? (
+	                          <div className="absolute inset-0 bg-[linear-gradient(135deg,#d7ecfb_0%,#f8fbfd_55%,#e0f2fe_100%)]">
+	                            <div className="flex h-full items-center justify-center px-4">
+	                              <Image
+	                                src={defaultProductImage}
+	                                alt=""
+	                                width={160}
+	                                height={48}
+	                                className="h-10 w-auto opacity-90"
+	                                draggable={false}
+	                              />
+	                            </div>
+	                          </div>
+	                        ) : (
+	                          <div
+	                            className="absolute inset-0 bg-cover bg-center"
+	                            style={{ backgroundImage: `url(${product.image})` }}
+	                          />
+	                        )}
 	                        <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/20 to-black/5" />
 	                        <span className="absolute right-3 top-3 rounded-md bg-white/90 px-2 py-1 text-xs font-semibold text-[#1f2623]">
 	                          Stok {product.stock}
@@ -2273,10 +3789,59 @@ export default function MavaposShell({
 	                  <span>Subtotal</span>
 	                  <strong>{formatCurrency(subtotal)}</strong>
 	                </div>
+	                <form
+	                  className="mt-3 grid gap-2"
+	                  onSubmit={(event) => {
+	                    event.preventDefault();
+	                    applyPromoCode();
+	                  }}
+	                >
+	                  <label
+	                    htmlFor="cart-promo-code"
+	                    className="text-xs font-semibold uppercase tracking-wide text-[#69756f]"
+	                  >
+	                    Kode promo
+	                  </label>
+	                  <div className="flex gap-2">
+	                    <Input
+	                      id="cart-promo-code"
+	                      value={promoCodeInput}
+	                      onChange={(event) => {
+	                        setPromoCodeInput(event.target.value);
+	                        setPromoCodeError("");
+	                      }}
+	                      placeholder={promoCodeHint}
+	                      className="h-9 min-h-9 bg-white"
+	                    />
+	                    <Button
+	                      type="submit"
+	                      variant="outline"
+	                      className="h-9 min-h-9 shrink-0 px-3"
+	                      disabled={cart.length === 0}
+	                    >
+	                      Apply
+	                    </Button>
+	                  </div>
+	                  {promoCodeError && (
+	                    <p className="text-xs font-medium text-destructive">{promoCodeError}</p>
+	                  )}
+	                </form>
 	                {discount > 0 && (
-	                  <div className="mt-3 flex justify-between text-sm text-[#0369a1]">
-	                    <span>Promo kopi sore</span>
-	                    <strong>-{formatCurrency(discount)}</strong>
+	                  <div className="mt-3 flex items-center justify-between gap-3 rounded-lg bg-[#e0f2fe] px-3 py-2 text-sm text-[#075985]">
+	                    <div className="min-w-0">
+	                      <span className="block truncate font-semibold">
+	                        {appliedPromo?.name ?? "Promo"}
+	                      </span>
+	                      <strong className="block">-{formatCurrency(discount)}</strong>
+	                    </div>
+	                    <button
+	                      type="button"
+	                      onClick={() => removeAppliedPromo()}
+	                      className="flex size-7 !min-h-0 shrink-0 items-center justify-center rounded-md bg-white text-[#075985]"
+	                      aria-label="Hapus promo transaksi"
+	                    >
+	                      <X size={14} />
+	                    </button>
 	                  </div>
 	                )}
 	                <div className="mt-4 border-t border-[#dde3da] pt-4">
@@ -2368,7 +3933,7 @@ export default function MavaposShell({
                 </div>
 	                {discount > 0 && (
 	                  <div className="mt-3 flex justify-between text-sm text-[#0369a1]">
-	                    <span>Promo kopi sore</span>
+	                    <span>{appliedPromo?.name ?? "Promo"}</span>
 	                    <strong>-{formatCurrency(discount)}</strong>
 	                  </div>
 	                )}
@@ -2413,9 +3978,9 @@ export default function MavaposShell({
                     />
                   </div>
                   <div className="grid grid-cols-3 gap-2">
-                    {[total, 50000, 100000].map((value) => (
+                    {[total, 50000, 100000].map((value, index) => (
                       <Button
-                        key={value}
+                        key={`${index}-${value}`}
                         variant="outline"
                         onClick={() => setCashReceived(value)}
                       >
@@ -2586,14 +4151,38 @@ export default function MavaposShell({
             </DialogDescription>
           </DialogHeader>
 
-          <div className="grid gap-2">
-            <Label htmlFor="category-name">Nama kategori</Label>
-            <Input
-              id="category-name"
-              value={categoryForm.name}
-              onChange={(event) => setCategoryForm({ name: event.target.value })}
-              placeholder="Contoh: Minuman"
-            />
+          <div className="grid gap-4">
+            <div className="grid gap-2">
+              <Label htmlFor="category-name">Nama kategori</Label>
+              <Input
+                id="category-name"
+                value={categoryForm.name}
+                onChange={(event) => setCategoryForm({ name: event.target.value })}
+                placeholder="Contoh: Minuman"
+              />
+            </div>
+
+            <div className="grid gap-2">
+              <p className="text-sm font-medium">Daftar kategori</p>
+              <div className="grid gap-2">
+                {categories.map((item) => (
+                  <div
+                    key={item}
+                    className="flex items-center justify-between rounded-lg border border-[#dde3da] bg-[#fbfcfa] px-3 py-2"
+                  >
+                    <span className="text-sm font-medium">{item}</span>
+                    <Button
+                      variant="destructive"
+                      size="icon-sm"
+                      onClick={() => deleteCategory(item)}
+                      aria-label={`Hapus kategori ${item}`}
+                    >
+                      <Trash2 size={14} />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
 
           <DialogFooter>
@@ -2607,6 +4196,121 @@ export default function MavaposShell({
               Batal
             </Button>
             <Button onClick={saveCategory}>Simpan kategori</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={ingredientModal !== null}
+        onOpenChange={(open) => {
+          if (!open) closeIngredientModal();
+        }}
+      >
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>
+              {ingredientModal === "create" ? "Tambah bahan" : "Edit bahan"}
+            </DialogTitle>
+            <DialogDescription>
+              Catat bahan baku utama yang digunakan untuk meracik menu.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="grid gap-4">
+            <div className="grid gap-2">
+              <Label htmlFor="ingredient-name">Nama bahan</Label>
+              <Input
+                id="ingredient-name"
+                value={ingredientForm.name}
+                onChange={(event) =>
+                  setIngredientForm((form) => ({ ...form, name: event.target.value }))
+                }
+                placeholder="Contoh: Es batu"
+              />
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="grid gap-2">
+                <Label htmlFor="ingredient-unit">Satuan</Label>
+                <Input
+                  id="ingredient-unit"
+                  value={ingredientForm.unit}
+                  onChange={(event) =>
+                    setIngredientForm((form) => ({ ...form, unit: event.target.value }))
+                  }
+                  placeholder="Contoh: kg, liter, box"
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="ingredient-cost">Biaya per unit</Label>
+                <Input
+                  id="ingredient-cost"
+                  type="number"
+                  min={0}
+                  value={ingredientForm.costPerUnit}
+                  onChange={(event) =>
+                    setIngredientForm((form) => ({
+                      ...form,
+                      costPerUnit: Number(event.target.value),
+                    }))
+                  }
+                />
+              </div>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="grid gap-2">
+                <Label htmlFor="ingredient-stock">Stok sekarang</Label>
+                <Input
+                  id="ingredient-stock"
+                  type="number"
+                  min={0}
+                  value={ingredientForm.stock}
+                  onChange={(event) =>
+                    setIngredientForm((form) => ({
+                      ...form,
+                      stock: Number(event.target.value),
+                    }))
+                  }
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="ingredient-min-stock">Minimum stok</Label>
+                <Input
+                  id="ingredient-min-stock"
+                  type="number"
+                  min={0}
+                  value={ingredientForm.minStock}
+                  onChange={(event) =>
+                    setIngredientForm((form) => ({
+                      ...form,
+                      minStock: Number(event.target.value),
+                    }))
+                  }
+                />
+              </div>
+            </div>
+
+            <div className="grid gap-2">
+              <Label htmlFor="ingredient-used-for">Dipakai di menu</Label>
+              <Input
+                id="ingredient-used-for"
+                value={ingredientForm.usedFor}
+                onChange={(event) =>
+                  setIngredientForm((form) => ({ ...form, usedFor: event.target.value }))
+                }
+                placeholder="Contoh: Es teh, Es kopi susu"
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={closeIngredientModal}>
+              Batal
+            </Button>
+            <Button onClick={saveIngredient}>
+              {ingredientModal === "create" ? "Simpan bahan" : "Simpan perubahan"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -2678,6 +4382,18 @@ export default function MavaposShell({
             </div>
 
             <div className="grid gap-2">
+              <Label htmlFor="promo-code">Kode promo</Label>
+              <Input
+                id="promo-code"
+                value={promoForm.code}
+                onChange={(event) =>
+                  setPromoForm((form) => ({ ...form, code: normalizePromoCode(event.target.value) }))
+                }
+                placeholder="Contoh: DISKONKOPISORE"
+              />
+            </div>
+
+            <div className="grid gap-2">
               <Label htmlFor="promo-target">Target promo</Label>
               <Input
                 id="promo-target"
@@ -2722,6 +4438,137 @@ export default function MavaposShell({
             </Button>
             <Button onClick={savePromo}>
               {promoModal === "create" ? "Simpan promo" : "Simpan perubahan"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={expenseModal !== null}
+        onOpenChange={(open) => {
+          if (!open) closeExpenseModal();
+        }}
+      >
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>
+              {expenseModal === "create" ? "Tambah pengeluaran" : "Edit pengeluaran"}
+            </DialogTitle>
+            <DialogDescription>
+              Simpan pengeluaran operasional agar laporan outlet lebih rapi.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="grid gap-4">
+            <div className="grid gap-2">
+              <Label htmlFor="expense-title">Judul pengeluaran</Label>
+              <Input
+                id="expense-title"
+                value={expenseForm.title}
+                onChange={(event) =>
+                  setExpenseForm((form) => ({ ...form, title: event.target.value }))
+                }
+                placeholder="Contoh: Belanja bahan minuman"
+              />
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="grid gap-2">
+                <Label htmlFor="expense-category">Kategori</Label>
+                <Input
+                  id="expense-category"
+                  value={expenseForm.category}
+                  onChange={(event) =>
+                    setExpenseForm((form) => ({ ...form, category: event.target.value }))
+                  }
+                  placeholder="Contoh: Operasional"
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="expense-date">Tanggal</Label>
+                <Input
+                  id="expense-date"
+                  type="date"
+                  value={expenseForm.date}
+                  onChange={(event) =>
+                    setExpenseForm((form) => ({ ...form, date: event.target.value }))
+                  }
+                />
+              </div>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="grid gap-2">
+                <Label htmlFor="expense-amount">Nominal</Label>
+                <Input
+                  id="expense-amount"
+                  type="number"
+                  min={0}
+                  value={expenseForm.amount}
+                  onChange={(event) =>
+                    setExpenseForm((form) => ({ ...form, amount: Number(event.target.value) }))
+                  }
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="expense-method">Metode bayar</Label>
+                <select
+                  id="expense-method"
+                  value={expenseForm.paymentMethod}
+                  onChange={(event) =>
+                    setExpenseForm((form) => ({
+                      ...form,
+                      paymentMethod: event.target.value as Expense["paymentMethod"],
+                    }))
+                  }
+                  className="h-10 rounded-lg border border-input bg-background px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+                >
+                  <option>Kas outlet</option>
+                  <option>Tunai</option>
+                  <option>Transfer</option>
+                  <option>QRIS</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="grid gap-2">
+                <Label htmlFor="expense-status">Status</Label>
+                <select
+                  id="expense-status"
+                  value={expenseForm.status}
+                  onChange={(event) =>
+                    setExpenseForm((form) => ({
+                      ...form,
+                      status: event.target.value as Expense["status"],
+                    }))
+                  }
+                  className="h-10 rounded-lg border border-input bg-background px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+                >
+                  <option>Tercatat</option>
+                  <option>Draft</option>
+                </select>
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="expense-note">Catatan</Label>
+                <Input
+                  id="expense-note"
+                  value={expenseForm.note}
+                  onChange={(event) =>
+                    setExpenseForm((form) => ({ ...form, note: event.target.value }))
+                  }
+                  placeholder="Contoh: Restock supplier mingguan"
+                />
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={closeExpenseModal}>
+              Batal
+            </Button>
+            <Button onClick={saveExpense}>
+              {expenseModal === "create" ? "Simpan pengeluaran" : "Simpan perubahan"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -2886,6 +4733,31 @@ export default function MavaposShell({
         </AlertDialogContent>
       </AlertDialog>
 
+      <AlertDialog open={Boolean(deleteIngredient)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogMedia>
+              <Package />
+            </AlertDialogMedia>
+            <AlertDialogTitle>Hapus bahan?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Bahan <strong>{deleteIngredient?.name}</strong> akan dihapus dari daftar bahan.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setDeleteIngredient(null)}>
+              Batal
+            </AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-white hover:bg-destructive/90"
+              onClick={confirmDeleteIngredient}
+            >
+              Hapus bahan
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <AlertDialog open={Boolean(deleteStaff)}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -2906,6 +4778,31 @@ export default function MavaposShell({
               onClick={confirmDeleteStaff}
             >
               Hapus staf
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={Boolean(deleteExpense)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogMedia>
+              <ReceiptText />
+            </AlertDialogMedia>
+            <AlertDialogTitle>Hapus pengeluaran?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Catatan <strong>{deleteExpense?.title}</strong> akan dihapus dari daftar pengeluaran.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setDeleteExpense(null)}>
+              Batal
+            </AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-white hover:bg-destructive/90"
+              onClick={confirmDeleteExpense}
+            >
+              Hapus pengeluaran
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

@@ -159,7 +159,7 @@ button {
 
 .auth-scope,
 .cashier-scope {
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.45;
 }
 
@@ -171,12 +171,40 @@ button {
 
 .auth-scope :where(p, a, label, span, strong, button, input, select, textarea),
 .cashier-scope :where(p, a, label, span, strong, button, input, select, textarea) {
-  font-size: 13px;
+  font-size: 14px;
 }
 
 .auth-scope :where(button, input, select, textarea),
 .cashier-scope :where(button, input, select, textarea) {
   min-height: 40px;
+}
+
+.auth-scope :where(button),
+.cashier-scope :where(button),
+.auth-scope :where(a),
+.cashier-scope :where(a),
+.auth-scope :where(input),
+.cashier-scope :where(input),
+.auth-scope :where(select),
+.cashier-scope :where(select),
+.auth-scope :where(textarea),
+.cashier-scope :where(textarea),
+.auth-scope [role="tab"],
+.cashier-scope [role="tab"],
+.auth-scope [data-slot="button"],
+.cashier-scope [data-slot="button"],
+.auth-scope [data-slot="input"],
+.cashier-scope [data-slot="input"],
+.auth-scope [data-slot="select-trigger"],
+.cashier-scope [data-slot="select-trigger"] {
+  font-size: 14px !important;
+}
+
+.auth-scope :where(input)::placeholder,
+.cashier-scope :where(input)::placeholder,
+.auth-scope :where(textarea)::placeholder,
+.cashier-scope :where(textarea)::placeholder {
+  font-size: 14px !important;
 }
 
 .auth-scope :where(input, select, textarea),
