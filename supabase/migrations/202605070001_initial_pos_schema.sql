@@ -311,7 +311,7 @@ begin
   insert into public.outlets (name, business_type, whatsapp)
   values (
     outlet_name,
-    coalesce((new.raw_user_meta_data->>'business_type')::public.business_type, 'FnB'),
+    coalesce(nullif(new.raw_user_meta_data->>'business_type', '')::public.business_type, 'FnB'),
     nullif(trim(coalesce(new.raw_user_meta_data->>'whatsapp', '')), '')
   )
   returning id into new_outlet_id;
@@ -322,13 +322,13 @@ begin
     new_outlet_id,
     coalesce(nullif(trim(coalesce(new.raw_user_meta_data->>'full_name', new.raw_user_meta_data->>'name', '')), ''), split_part(new.email, '@', 1)),
     new.email,
-    coalesce((new.raw_user_meta_data->>'role')::public.user_role, 'Owner'),
+    coalesce(nullif(new.raw_user_meta_data->>'role', '')::public.user_role, 'Owner'),
     nullif(trim(coalesce(new.raw_user_meta_data->>'whatsapp', '')), ''),
     'Aktif'
   );
 
-  insert into public.outlet_subscriptions (outlet_id, plan_id, status)
-  values (new_outlet_id, 'core', 'Aktif')
+  insert into public.outlet_subscriptions (outlet_id, plan_id, status, current_period_ends_at)
+  values (new_outlet_id, 'core', 'Trial', now() + interval '30 days')
   on conflict (outlet_id) do nothing;
 
   insert into public.categories (outlet_id, name)
@@ -342,6 +342,73 @@ $$;
 create trigger on_auth_user_created
 after insert on auth.users
 for each row execute function public.handle_new_user();
+
+create or replace function public.ensure_current_user_profile()
+returns table (profile_id uuid, outlet_id uuid)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  current_user auth.users%rowtype;
+  new_outlet_id uuid;
+  outlet_name text;
+begin
+  select * into current_user from auth.users where id = auth.uid();
+
+  if current_user.id is null then
+    raise exception 'Not authenticated';
+  end if;
+
+  select profiles.id, profiles.outlet_id
+  into profile_id, outlet_id
+  from public.profiles
+  where profiles.id = current_user.id;
+
+  if profile_id is not null and outlet_id is not null then
+    return next;
+    return;
+  end if;
+
+  outlet_name := nullif(trim(coalesce(current_user.raw_user_meta_data->>'outlet', '')), '');
+
+  if outlet_name is null then
+    outlet_name := 'Outlet Mava Demo';
+  end if;
+
+  insert into public.outlets (name, business_type, whatsapp)
+  values (
+    outlet_name,
+    coalesce(nullif(current_user.raw_user_meta_data->>'business_type', '')::public.business_type, 'FnB'),
+    nullif(trim(coalesce(current_user.raw_user_meta_data->>'whatsapp', '')), '')
+  )
+  returning id into new_outlet_id;
+
+  insert into public.profiles (id, outlet_id, name, email, role, whatsapp, status)
+  values (
+    current_user.id,
+    new_outlet_id,
+    coalesce(nullif(trim(coalesce(current_user.raw_user_meta_data->>'full_name', current_user.raw_user_meta_data->>'name', '')), ''), split_part(current_user.email, '@', 1)),
+    current_user.email,
+    coalesce(nullif(current_user.raw_user_meta_data->>'role', '')::public.user_role, 'Owner'),
+    nullif(trim(coalesce(current_user.raw_user_meta_data->>'whatsapp', '')), ''),
+    'Aktif'
+  )
+  returning profiles.id, profiles.outlet_id into profile_id, outlet_id;
+
+  insert into public.outlet_subscriptions (outlet_id, plan_id, status, current_period_ends_at)
+  values (new_outlet_id, 'core', 'Trial', now() + interval '30 days')
+  on conflict (outlet_id) do nothing;
+
+  insert into public.categories (outlet_id, name)
+  values (new_outlet_id, 'FnB'), (new_outlet_id, 'Retail')
+  on conflict (outlet_id, name) do nothing;
+
+  return next;
+end;
+$$;
+
+grant execute on function public.ensure_current_user_profile() to authenticated;
 
 alter table public.outlets enable row level security;
 alter table public.profiles enable row level security;

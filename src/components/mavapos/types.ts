@@ -1,5 +1,7 @@
+export type EntityId = string | number;
+
 export type Product = {
-  id: number;
+  id: EntityId;
   name: string;
   category: string;
   price: number;
@@ -19,7 +21,7 @@ export type CategoryForm = {
 };
 
 export type Ingredient = {
-  id: number;
+  id: EntityId;
   name: string;
   unit: string;
   stock: number;
@@ -38,13 +40,13 @@ export type IngredientForm = {
 };
 
 export type ProductRecipe = {
-  productId: number;
-  ingredientId: number;
+  productId: EntityId;
+  ingredientId: EntityId;
   qty: number;
 };
 
 export type Promo = {
-  id: number;
+  id: EntityId;
   name: string;
   code: string;
   type: string;
@@ -57,7 +59,7 @@ export type Promo = {
 export type PromoForm = Omit<Promo, "id">;
 
 export type StaffMember = {
-  id: number;
+  id: EntityId;
   name: string;
   role: "Kasir";
   phone: string;
@@ -70,7 +72,7 @@ export type StaffForm = Omit<StaffMember, "id">;
 export type PaymentMethod = "Tunai" | "QRIS";
 
 export type Expense = {
-  id: number;
+  id: EntityId;
   title: string;
   category: string;
   amount: number;
@@ -89,8 +91,8 @@ export type StockMovementType =
   | "Stok opname";
 
 export type StockMovement = {
-  id: number;
-  productId: number;
+  id: EntityId;
+  productId: EntityId;
   productName: string;
   category: string;
   type: StockMovementType;

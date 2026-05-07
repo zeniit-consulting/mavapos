@@ -27,7 +27,7 @@ import {
   UserRound,
   Utensils,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -87,6 +87,7 @@ import type {
   ExpenseForm,
   Ingredient,
   IngredientForm,
+  EntityId,
   LoginForm,
   MenuLabel,
   NewPasswordForm,
@@ -118,6 +119,253 @@ function formatStockTimestamp(date = new Date()) {
     hour: "2-digit",
     minute: "2-digit",
   }).format(date);
+}
+
+function getNextLocalId(items: { id: EntityId }[]) {
+  const numericIds = items
+    .map((item) => (typeof item.id === "number" ? item.id : Number(item.id)))
+    .filter((id) => Number.isFinite(id));
+
+  return Math.max(0, ...numericIds) + 1;
+}
+
+function toId(value: EntityId) {
+  return String(value);
+}
+
+type OutletContext = {
+  outletId: string;
+  profileId: string;
+};
+
+type CategoryRow = {
+  id: string;
+  name: string;
+};
+
+type ProductRow = {
+  id: string;
+  name: string;
+  price: number;
+  stock: number | string;
+  tag: string | null;
+  image_url: string | null;
+  categories?: { name: string } | { name: string }[] | null;
+};
+
+type IngredientRow = {
+  id: string;
+  name: string;
+  unit: string;
+  stock: number | string;
+  min_stock: number | string;
+  cost_per_unit: number;
+};
+
+type ProductRecipeRow = {
+  product_id: string;
+  ingredient_id: string;
+  qty: number | string;
+};
+
+type PromoRow = {
+  id: string;
+  name: string;
+  code: string;
+  type: string;
+  target: string;
+  value: string;
+  period: string;
+  status: Promo["status"];
+};
+
+type StaffRow = {
+  id: string;
+  name: string;
+  role: StaffMember["role"];
+  phone: string;
+  shift: StaffMember["shift"];
+  status: StaffMember["status"];
+};
+
+type ExpenseRow = {
+  id: string;
+  title: string;
+  category: string;
+  amount: number;
+  expense_date: string;
+  payment_method: Expense["paymentMethod"];
+  note: string | null;
+  status: Expense["status"];
+};
+
+type StockMovementRow = {
+  id: string;
+  product_id: string | null;
+  product_name: string;
+  category_name: string | null;
+  type: StockMovementType;
+  qty_change: number | string;
+  previous_stock: number | string;
+  next_stock: number | string;
+  note: string | null;
+  created_at: string;
+};
+
+type TransactionRecord = {
+  id: string;
+  invoiceNo: string;
+  subtotal: number;
+  discount: number;
+  total: number;
+  paymentMethod: PaymentMethod;
+  status: "Selesai" | "Void" | "Refund";
+  completedAt: string;
+};
+
+type TransactionRow = {
+  id: string;
+  invoice_no: string;
+  subtotal: number;
+  discount: number;
+  total: number;
+  payment_method: PaymentMethod;
+  status: TransactionRecord["status"];
+  completed_at: string;
+};
+
+type TransactionItemRecord = {
+  id: string;
+  transactionId: string;
+  productId: EntityId | null;
+  productName: string;
+  categoryName: string;
+  unitPrice: number;
+  qty: number;
+  lineTotal: number;
+};
+
+type TransactionItemRow = {
+  id: string;
+  transaction_id: string;
+  product_id: string | null;
+  product_name: string;
+  category_name: string | null;
+  unit_price: number;
+  qty: number | string;
+  line_total: number;
+};
+
+function mapProduct(row: ProductRow): Product {
+  const category = Array.isArray(row.categories) ? row.categories[0] : row.categories;
+
+  return {
+    id: row.id,
+    name: row.name,
+    category: category?.name ?? "Tanpa kategori",
+    price: row.price,
+    stock: Number(row.stock),
+    tag: row.tag ?? "Reguler",
+    image: row.image_url ?? defaultProductImage,
+  };
+}
+
+function mapIngredient(row: IngredientRow): Ingredient {
+  return {
+    id: row.id,
+    name: row.name,
+    unit: row.unit,
+    stock: Number(row.stock),
+    minStock: Number(row.min_stock),
+    costPerUnit: row.cost_per_unit,
+    usedFor: [],
+  };
+}
+
+function mapRecipe(row: ProductRecipeRow): ProductRecipe {
+  return {
+    productId: row.product_id,
+    ingredientId: row.ingredient_id,
+    qty: Number(row.qty),
+  };
+}
+
+function mapPromo(row: PromoRow): Promo {
+  return {
+    id: row.id,
+    name: row.name,
+    code: row.code,
+    type: row.type,
+    target: row.target,
+    value: row.value,
+    period: row.period,
+    status: row.status,
+  };
+}
+
+function mapStaff(row: StaffRow): StaffMember {
+  return {
+    id: row.id,
+    name: row.name,
+    role: row.role,
+    phone: row.phone,
+    shift: row.shift,
+    status: row.status,
+  };
+}
+
+function mapExpense(row: ExpenseRow): Expense {
+  return {
+    id: row.id,
+    title: row.title,
+    category: row.category,
+    amount: row.amount,
+    date: row.expense_date,
+    paymentMethod: row.payment_method,
+    note: row.note ?? "",
+    status: row.status,
+  };
+}
+
+function mapStockMovement(row: StockMovementRow): StockMovement {
+  return {
+    id: row.id,
+    productId: row.product_id ?? "",
+    productName: row.product_name,
+    category: row.category_name ?? "",
+    type: row.type,
+    qtyChange: Number(row.qty_change),
+    previousStock: Number(row.previous_stock),
+    nextStock: Number(row.next_stock),
+    note: row.note ?? "",
+    createdAt: formatStockTimestamp(new Date(row.created_at)),
+  };
+}
+
+function mapTransaction(row: TransactionRow): TransactionRecord {
+  return {
+    id: row.id,
+    invoiceNo: row.invoice_no,
+    subtotal: row.subtotal,
+    discount: row.discount,
+    total: row.total,
+    paymentMethod: row.payment_method,
+    status: row.status,
+    completedAt: row.completed_at,
+  };
+}
+
+function mapTransactionItem(row: TransactionItemRow): TransactionItemRecord {
+  return {
+    id: row.id,
+    transactionId: row.transaction_id,
+    productId: row.product_id,
+    productName: row.product_name,
+    categoryName: row.category_name ?? "Tanpa kategori",
+    unitPrice: row.unit_price,
+    qty: Number(row.qty),
+    lineTotal: row.line_total,
+  };
 }
 
 function getStoredInventory() {
@@ -331,6 +579,8 @@ export default function MavaposShell({
   const [showSplash, setShowSplash] = useState(true);
   const [authReady, setAuthReady] = useState(false);
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
+  const [outletContext, setOutletContext] = useState<OutletContext | null>(null);
+  const [dataLoading, setDataLoading] = useState(false);
 	  const [authSource, setAuthSource] = useState<"supabase" | "demo" | null>(null);
 	  const [authMode, setAuthMode] = useState<AuthMode>("login");
 	  const [loginForm, setLoginForm] = useState<LoginForm>({
@@ -359,17 +609,20 @@ export default function MavaposShell({
   const [categories, setCategories] = useState(
     () => getStoredInventory()?.categories ?? initialCategories,
   );
+  const [categoryIdByName, setCategoryIdByName] = useState<Record<string, string>>({});
   const [ingredients, setIngredients] = useState<Ingredient[]>(
     () => getStoredOperations()?.ingredients ?? initialIngredients,
   );
   const [expenses, setExpenses] = useState<Expense[]>(
     () => getStoredOperations()?.expenses ?? initialExpenses,
   );
-  const [recipes] = useState<ProductRecipe[]>(
+  const [recipes, setRecipes] = useState<ProductRecipe[]>(
     () => getStoredOperations()?.recipes ?? initialRecipes,
   );
   const [promos, setPromos] = useState<Promo[]>(initialPromos);
   const [staffMembers, setStaffMembers] = useState<StaffMember[]>(initialStaffMembers);
+  const [transactions, setTransactions] = useState<TransactionRecord[]>([]);
+  const [transactionItems, setTransactionItems] = useState<TransactionItemRecord[]>([]);
   const [activeMenu, setActiveMenu] = useState<MenuLabel>(initialMenu);
   const [stockView, setStockView] = useState<"products" | "movements" | "opname">("products");
   const [cart, setCart] = useState<CartItem[]>([
@@ -379,7 +632,7 @@ export default function MavaposShell({
   const [category, setCategory] = useState("Semua");
   const [promoIndex, setPromoIndex] = useState(0);
   const [promoCodeInput, setPromoCodeInput] = useState("");
-  const [appliedPromoId, setAppliedPromoId] = useState<number | null>(null);
+  const [appliedPromoId, setAppliedPromoId] = useState<EntityId | null>(null);
   const [promoCodeError, setPromoCodeError] = useState("");
   const [productQuery, setProductQuery] = useState("");
   const [ingredientQuery, setIngredientQuery] = useState("");
@@ -396,11 +649,11 @@ export default function MavaposShell({
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("Tunai");
   const [cashReceived, setCashReceived] = useState(50000);
   const [paymentStep, setPaymentStep] = useState<"form" | "success">("form");
-  const [editingProductId, setEditingProductId] = useState<number | null>(null);
-  const [editingIngredientId, setEditingIngredientId] = useState<number | null>(null);
-  const [editingPromoId, setEditingPromoId] = useState<number | null>(null);
-  const [editingStaffId, setEditingStaffId] = useState<number | null>(null);
-  const [editingExpenseId, setEditingExpenseId] = useState<number | null>(null);
+  const [editingProductId, setEditingProductId] = useState<EntityId | null>(null);
+  const [editingIngredientId, setEditingIngredientId] = useState<EntityId | null>(null);
+  const [editingPromoId, setEditingPromoId] = useState<EntityId | null>(null);
+  const [editingStaffId, setEditingStaffId] = useState<EntityId | null>(null);
+  const [editingExpenseId, setEditingExpenseId] = useState<EntityId | null>(null);
   const [deleteProduct, setDeleteProduct] = useState<Product | null>(null);
   const [deleteIngredient, setDeleteIngredient] = useState<Ingredient | null>(null);
   const [deletePromo, setDeletePromo] = useState<Promo | null>(null);
@@ -409,12 +662,11 @@ export default function MavaposShell({
   const [isPageLoading, setIsPageLoading] = useState(false);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const nextToastIdRef = useRef(0);
+  const nextInvoiceNoRef = useRef(1049);
   const [stockMovements, setStockMovements] = useState<StockMovement[]>(
     () => getStoredInventory()?.stockMovements ?? [],
   );
-  const nextStockMovementIdRef = useRef(
-    Math.max(0, ...stockMovements.map((movement) => movement.id)),
-  );
+  const nextStockMovementIdRef = useRef(getNextLocalId(stockMovements) - 1);
   const [stockAdjustmentForm, setStockAdjustmentForm] = useState<{
     productId: string;
     type: Exclude<StockMovementType, "Penjualan" | "Stok opname">;
@@ -518,14 +770,14 @@ export default function MavaposShell({
     activePromos.length > 0 ? Math.min(promoIndex, activePromos.length - 1) : 0;
   const currentPromo = activePromos[currentPromoIndex];
   const currentPromoImage = promoSlides[currentPromoIndex % promoSlides.length].image;
-  const appliedPromo = activePromos.find((promo) => promo.id === appliedPromoId);
+  const appliedPromo = activePromos.find((promo) => toId(promo.id) === toId(appliedPromoId ?? ""));
   const promoCodeHint = transactionPromos[0]?.code || "DISKONKOPISORE";
   const currentPlan = saasPlans.find((plan) => plan.status === "Aktif")?.name ?? "Core";
   const hasBasicAccess = currentPlan !== "Core";
-  const ingredientUsageMap = ingredients.reduce<Record<number, string[]>>((accumulator, ingredient) => {
-    accumulator[ingredient.id] = recipes
-      .filter((recipe) => recipe.ingredientId === ingredient.id)
-      .map((recipe) => products.find((product) => product.id === recipe.productId)?.name)
+  const ingredientUsageMap = ingredients.reduce<Record<string, string[]>>((accumulator, ingredient) => {
+    accumulator[toId(ingredient.id)] = recipes
+      .filter((recipe) => toId(recipe.ingredientId) === toId(ingredient.id))
+      .map((recipe) => products.find((product) => toId(product.id) === toId(recipe.productId))?.name)
       .filter((name): name is string => Boolean(name));
     return accumulator;
   }, {});
@@ -539,21 +791,120 @@ export default function MavaposShell({
   const cashChange = Math.max(cashReceived - total, 0);
   const isPaymentReady = total > 0 && (paymentMethod === "QRIS" || cashReceived >= total);
   const canManageOutlet = authUser?.role === "Owner";
+  const dateFormatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Makassar",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+  const dayLabelFormatter = new Intl.DateTimeFormat("id-ID", {
+    timeZone: "Asia/Makassar",
+    weekday: "short",
+  });
+  const todayKey = dateFormatter.format(new Date());
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+  const yesterdayKey = dateFormatter.format(yesterday);
+  const completedTransactions = transactions.filter((transaction) => transaction.status === "Selesai");
+  const todayTransactions = completedTransactions.filter(
+    (transaction) => dateFormatter.format(new Date(transaction.completedAt)) === todayKey,
+  );
+  const yesterdayTransactions = completedTransactions.filter(
+    (transaction) => dateFormatter.format(new Date(transaction.completedAt)) === yesterdayKey,
+  );
+  const todayTransactionIds = new Set(todayTransactions.map((transaction) => transaction.id));
+  const todayTransactionItems = transactionItems.filter((item) =>
+    todayTransactionIds.has(item.transactionId),
+  );
+  const todaySalesTotal = todayTransactions.reduce((sum, transaction) => sum + transaction.total, 0);
+  const yesterdaySalesTotal = yesterdayTransactions.reduce((sum, transaction) => sum + transaction.total, 0);
+  const todayItemsSold = todayTransactionItems.reduce((sum, item) => sum + item.qty, 0);
+  const averageTransaction = todayTransactions.length > 0
+    ? Math.round(todaySalesTotal / todayTransactions.length)
+    : 0;
+  const todayExpensesTotal = expenses
+    .filter((expense) => expense.status === "Tercatat" && expense.date === todayKey)
+    .reduce((sum, expense) => sum + expense.amount, 0);
+  const todayNetProfit = todaySalesTotal - todayExpensesTotal;
+  const profitPercent = todaySalesTotal > 0
+    ? Math.max(0, Math.min(100, Math.round((todayNetProfit / todaySalesTotal) * 100)))
+    : 0;
+  const discountPercent = todaySalesTotal + todayTransactions.reduce((sum, item) => sum + item.discount, 0) > 0
+    ? Math.round(
+        (todayTransactions.reduce((sum, item) => sum + item.discount, 0) /
+          (todaySalesTotal + todayTransactions.reduce((sum, item) => sum + item.discount, 0))) *
+          100,
+      )
+    : 0;
+  const fnBItemsSold = todayTransactionItems
+    .filter((item) => item.categoryName === "FnB")
+    .reduce((sum, item) => sum + item.qty, 0);
+  const fnBShare = todayItemsSold > 0 ? Math.round((fnBItemsSold / todayItemsSold) * 100) : 0;
+  const salesGrowth = yesterdaySalesTotal > 0
+    ? Math.round(((todaySalesTotal - yesterdaySalesTotal) / yesterdaySalesTotal) * 100)
+    : todaySalesTotal > 0
+      ? 100
+      : 0;
+  const salesChart = Array.from({ length: 7 }, (_, index) => {
+    const date = new Date();
+    date.setDate(date.getDate() - (6 - index));
+    const dateKey = dateFormatter.format(date);
+    const amount = completedTransactions
+      .filter((transaction) => dateFormatter.format(new Date(transaction.completedAt)) === dateKey)
+      .reduce((sum, transaction) => sum + transaction.total, 0);
+
+    return {
+      day: dayLabelFormatter.format(date),
+      amount,
+    };
+  });
+  const maxSalesAmount = Math.max(1, ...salesChart.map((item) => item.amount));
+  const paymentSummary = (["Tunai", "QRIS"] as const).map((method) => {
+    const methodTransactions = todayTransactions.filter((transaction) => transaction.paymentMethod === method);
+
+    return {
+      label: method,
+      value: formatCurrency(methodTransactions.reduce((sum, transaction) => sum + transaction.total, 0)),
+      note: `${methodTransactions.length} transaksi`,
+    };
+  });
+  const promoUsageSummary = {
+    label: "Promo digunakan",
+    value: formatCurrency(todayTransactions.reduce((sum, transaction) => sum + transaction.discount, 0)),
+    note: `${todayTransactions.filter((transaction) => transaction.discount > 0).length} transaksi`,
+  };
+  const bestSellingProducts = Object.values(
+    todayTransactionItems.reduce<Record<string, { name: string; category: string; qty: number }>>(
+      (accumulator, item) => {
+        const key = toId(item.productId ?? item.productName);
+        accumulator[key] ??= {
+          name: item.productName,
+          category: item.categoryName,
+          qty: 0,
+        };
+        accumulator[key].qty += item.qty;
+        return accumulator;
+      },
+      {},
+    ),
+  )
+    .sort((first, second) => second.qty - first.qty)
+    .slice(0, 4);
   const dashboardStats = [
     {
       label: "Penjualan hari ini",
-      value: formatCurrency(1425000),
-      note: "Naik 12% dari kemarin",
+      value: formatCurrency(todaySalesTotal),
+      note: yesterdaySalesTotal > 0 ? `${salesGrowth >= 0 ? "Naik" : "Turun"} ${Math.abs(salesGrowth)}% dari kemarin` : "Belum ada pembanding kemarin",
     },
     {
       label: "Transaksi hari ini",
-      value: "38 transaksi",
-      note: `${formatCurrency(37500)} rata-rata per transaksi`,
+      value: `${todayTransactions.length} transaksi`,
+      note: `${formatCurrency(averageTransaction)} rata-rata per transaksi`,
     },
     {
       label: "Produk terjual",
-      value: "96 item",
-      note: "FnB menyumbang 72% volume",
+      value: `${todayItemsSold} item`,
+      note: todayItemsSold > 0 ? `FnB menyumbang ${fnBShare}% volume` : "Belum ada produk terjual hari ini",
     },
     {
       label: "SKU aktif",
@@ -561,16 +912,6 @@ export default function MavaposShell({
       note: `${lowStockCount} produk butuh restock`,
     },
   ];
-  const salesChart = [
-    { day: "Sen", amount: 780000 },
-    { day: "Sel", amount: 920000 },
-    { day: "Rab", amount: 860000 },
-    { day: "Kam", amount: 1040000 },
-    { day: "Jum", amount: 1180000 },
-    { day: "Sab", amount: 1425000 },
-    { day: "Min", amount: 1280000 },
-  ];
-  const maxSalesAmount = Math.max(...salesChart.map((item) => item.amount));
   const ingredientPageCount = Math.max(1, Math.ceil(filteredIngredients.length / 5));
   const expensePageCount = Math.max(1, Math.ceil(filteredExpenses.length / 5));
   const currentIngredientPage = Math.min(ingredientPage, ingredientPageCount);
@@ -586,17 +927,205 @@ export default function MavaposShell({
   const accessibleMenu = canManageOutlet
     ? menu.filter((item) => hasBasicAccess || item.label !== "Bahan")
     : menu.filter((item) => item.label === "Dashboard" || item.label === "Kasir");
+  const isSupabaseSynced = authSource === "supabase" && Boolean(outletContext);
 
-  function dismissToast(id: number) {
+  const dismissToast = useCallback(function dismissToast(id: number) {
     setToasts((items) => items.filter((toast) => toast.id !== id));
-  }
+  }, []);
 
-  function showToast(variant: ToastVariant, title: string, description?: string) {
+  const showToast = useCallback(function showToast(variant: ToastVariant, title: string, description?: string) {
     const id = nextToastIdRef.current + 1;
     nextToastIdRef.current = id;
 
     setToasts((items) => [...items.slice(-3), { id, title, description, variant }]);
     window.setTimeout(() => dismissToast(id), 3600);
+  }, [dismissToast]);
+
+  const loadSupabaseData = useCallback(async function loadSupabaseData(userId: string) {
+    setDataLoading(true);
+
+    const { data: initialProfile, error: profileError } = await supabase
+      .from("profiles")
+      .select("id, outlet_id")
+      .eq("id", userId)
+      .single();
+    let profile = initialProfile;
+
+    if (profileError || !profile?.outlet_id) {
+      const { data: ensuredProfile, error: ensureError } = await supabase
+        .rpc("ensure_current_user_profile");
+
+      const ensuredOutletProfile = Array.isArray(ensuredProfile)
+        ? (ensuredProfile[0] as { profile_id?: string; outlet_id?: string } | undefined)
+        : (ensuredProfile as { profile_id?: string; outlet_id?: string } | null);
+
+      if (ensureError || !ensuredOutletProfile?.outlet_id) {
+        setDataLoading(false);
+        console.error("MAVA Supabase outlet sync failed");
+        console.error("profileError", profileError);
+        console.error("ensureError", ensureError);
+        console.error("ensuredProfile", ensuredProfile);
+        showToast(
+          "error",
+          "Data outlet belum siap",
+          ensureError?.message?.includes("ensure_current_user_profile")
+            ? "Jalankan migration Supabase terbaru: 202605070002_profile_outlet_fallback.sql."
+            : ensureError?.message ?? profileError?.message ?? "Profile Supabase belum memiliki outlet.",
+        );
+        return;
+      }
+
+      profile = {
+        id: ensuredOutletProfile.profile_id,
+        outlet_id: ensuredOutletProfile.outlet_id,
+      };
+    }
+
+    const nextOutletContext = {
+      outletId: profile.outlet_id as string,
+      profileId: profile.id as string,
+    };
+
+    setOutletContext(nextOutletContext);
+
+    const [
+      categoriesResult,
+      productsResult,
+      ingredientsResult,
+      recipesResult,
+      promosResult,
+      staffResult,
+      expensesResult,
+      transactionsResult,
+      transactionItemsResult,
+      stockMovementsResult,
+    ] = await Promise.all([
+      supabase
+        .from("categories")
+        .select("id, name")
+        .eq("outlet_id", nextOutletContext.outletId)
+        .order("created_at", { ascending: true }),
+      supabase
+        .from("products")
+        .select("id, name, price, stock, tag, image_url, categories(name)")
+        .eq("outlet_id", nextOutletContext.outletId)
+        .eq("is_active", true)
+        .order("created_at", { ascending: true }),
+      supabase
+        .from("ingredients")
+        .select("id, name, unit, stock, min_stock, cost_per_unit")
+        .eq("outlet_id", nextOutletContext.outletId)
+        .order("created_at", { ascending: true }),
+      supabase.from("product_recipes").select("product_id, ingredient_id, qty"),
+      supabase
+        .from("promos")
+        .select("id, name, code, type, target, value, period, status")
+        .eq("outlet_id", nextOutletContext.outletId)
+        .order("created_at", { ascending: true }),
+      supabase
+        .from("staff_members")
+        .select("id, name, role, phone, shift, status")
+        .eq("outlet_id", nextOutletContext.outletId)
+        .order("created_at", { ascending: true }),
+      supabase
+        .from("expenses")
+        .select("id, title, category, amount, expense_date, payment_method, note, status")
+        .eq("outlet_id", nextOutletContext.outletId)
+        .order("expense_date", { ascending: false }),
+      supabase
+        .from("transactions")
+        .select("id, invoice_no, subtotal, discount, total, payment_method, status, completed_at")
+        .eq("outlet_id", nextOutletContext.outletId)
+        .order("completed_at", { ascending: false }),
+      supabase
+        .from("transaction_items")
+        .select("id, transaction_id, product_id, product_name, category_name, unit_price, qty, line_total"),
+      supabase
+        .from("stock_movements")
+        .select("id, product_id, product_name, category_name, type, qty_change, previous_stock, next_stock, note, created_at")
+        .eq("outlet_id", nextOutletContext.outletId)
+        .order("created_at", { ascending: false }),
+    ]);
+
+    const firstError = [
+      categoriesResult.error,
+      productsResult.error,
+      ingredientsResult.error,
+      recipesResult.error,
+      promosResult.error,
+      staffResult.error,
+      expensesResult.error,
+      transactionsResult.error,
+      transactionItemsResult.error,
+      stockMovementsResult.error,
+    ].find(Boolean);
+
+    if (firstError) {
+      setDataLoading(false);
+      showToast("error", "Sinkronisasi gagal", firstError.message);
+      return;
+    }
+
+    const categoryRows = (categoriesResult.data ?? []) as CategoryRow[];
+    const nextCategoryIdByName = categoryRows.reduce<Record<string, string>>((accumulator, item) => {
+      accumulator[item.name] = item.id;
+      return accumulator;
+    }, {});
+
+    const nextRecipes = ((recipesResult.data ?? []) as ProductRecipeRow[]).map(mapRecipe);
+
+    setCategoryIdByName(nextCategoryIdByName);
+    setCategories(categoryRows.map((item) => item.name));
+    setProducts(((productsResult.data ?? []) as ProductRow[]).map(mapProduct));
+    setIngredients(((ingredientsResult.data ?? []) as IngredientRow[]).map(mapIngredient));
+    setRecipes(nextRecipes);
+    setPromos(((promosResult.data ?? []) as PromoRow[]).map(mapPromo));
+    setStaffMembers(((staffResult.data ?? []) as StaffRow[]).map(mapStaff));
+    setExpenses(((expensesResult.data ?? []) as ExpenseRow[]).map(mapExpense));
+    setTransactions(((transactionsResult.data ?? []) as TransactionRow[]).map(mapTransaction));
+    setTransactionItems(((transactionItemsResult.data ?? []) as TransactionItemRow[]).map(mapTransactionItem));
+    setStockMovements(((stockMovementsResult.data ?? []) as StockMovementRow[]).map(mapStockMovement));
+    setCart([]);
+    setDataLoading(false);
+  }, [showToast, supabase]);
+
+  async function persistStockMovement(
+    product: Product,
+    type: StockMovementType,
+    qtyChange: number,
+    previousStock: number,
+    nextStock: number,
+    note: string,
+    transactionId?: string,
+  ) {
+    if (!isSupabaseSynced || !outletContext || typeof product.id !== "string") {
+      return null;
+    }
+
+    const { data, error } = await supabase
+      .from("stock_movements")
+      .insert({
+        outlet_id: outletContext.outletId,
+        product_id: product.id,
+        transaction_id: transactionId ?? null,
+        product_name: product.name,
+        category_name: product.category,
+        type,
+        qty_change: qtyChange,
+        previous_stock: previousStock,
+        next_stock: nextStock,
+        note,
+        created_by: outletContext.profileId,
+      })
+      .select("id, product_id, product_name, category_name, type, qty_change, previous_stock, next_stock, note, created_at")
+      .single();
+
+    if (error) {
+      showToast("error", "Mutasi stok gagal sinkron", error.message);
+      return null;
+    }
+
+    return data ? mapStockMovement(data as StockMovementRow) : null;
   }
 
   function logStockMovement(
@@ -607,6 +1136,17 @@ export default function MavaposShell({
     nextStock: number,
     note: string,
   ) {
+    if (isSupabaseSynced) {
+      void persistStockMovement(product, type, qtyChange, previousStock, nextStock, note).then(
+        (movement) => {
+          if (movement) {
+            setStockMovements((items) => [movement, ...items]);
+          }
+        },
+      );
+      return;
+    }
+
     const id = nextStockMovementIdRef.current + 1;
     nextStockMovementIdRef.current = id;
 
@@ -627,13 +1167,14 @@ export default function MavaposShell({
     ]);
   }
 
-  function applyStockChange(
-    productId: number,
+  async function applyStockChange(
+    productId: EntityId,
     qtyChange: number,
     type: StockMovementType,
     note: string,
+    options: { transactionId?: string; skipPersistMovement?: boolean } = {},
   ) {
-    const currentProduct = products.find((product) => product.id === productId);
+    const currentProduct = products.find((product) => toId(product.id) === toId(productId));
 
     if (!currentProduct) {
       return false;
@@ -645,22 +1186,50 @@ export default function MavaposShell({
       return false;
     }
 
+    if (isSupabaseSynced && typeof productId === "string") {
+      const { error } = await supabase
+        .from("products")
+        .update({ stock: nextStock })
+        .eq("id", productId);
+
+      if (error) {
+        showToast("error", "Stok gagal disimpan", error.message);
+        return false;
+      }
+    }
+
     setProducts((items) =>
-      items.map((item) => (item.id === productId ? { ...item, stock: nextStock } : item)),
+      items.map((item) => (toId(item.id) === toId(productId) ? { ...item, stock: nextStock } : item)),
     );
     setCart((items) =>
-      items.map((item) => (item.id === productId ? { ...item, stock: nextStock } : item)),
+      items.map((item) => (toId(item.id) === toId(productId) ? { ...item, stock: nextStock } : item)),
     );
-    logStockMovement(currentProduct, type, qtyChange, currentProduct.stock, nextStock, note);
+    if (isSupabaseSynced && !options.skipPersistMovement) {
+      const movement = await persistStockMovement(
+        currentProduct,
+        type,
+        qtyChange,
+        currentProduct.stock,
+        nextStock,
+        note,
+        options.transactionId,
+      );
+
+      if (movement) {
+        setStockMovements((items) => [movement, ...items]);
+      }
+    } else if (!isSupabaseSynced) {
+      logStockMovement(currentProduct, type, qtyChange, currentProduct.stock, nextStock, note);
+    }
     return true;
   }
 
   function getRecipeRequirementsForCart(items: CartItem[]) {
-    const requirements = new Map<number, number>();
+    const requirements = new Map<EntityId, number>();
 
     items.forEach((item) => {
       recipes
-        .filter((recipe) => recipe.productId === item.id)
+        .filter((recipe) => toId(recipe.productId) === toId(item.id))
         .forEach((recipe) => {
           requirements.set(
             recipe.ingredientId,
@@ -676,7 +1245,7 @@ export default function MavaposShell({
     const requirements = getRecipeRequirementsForCart(items);
 
     for (const [ingredientId, qtyNeeded] of requirements.entries()) {
-      const ingredient = ingredients.find((item) => item.id === ingredientId);
+      const ingredient = ingredients.find((item) => toId(item.id) === toId(ingredientId));
 
       if (!ingredient || ingredient.stock < qtyNeeded) {
         return {
@@ -690,6 +1259,10 @@ export default function MavaposShell({
   }
 
   useEffect(() => {
+    if (!authReady || authSource === "supabase") {
+      return;
+    }
+
     window.localStorage.setItem(
       "mavapos.inventory",
       JSON.stringify({
@@ -698,9 +1271,13 @@ export default function MavaposShell({
         stockMovements,
       }),
     );
-  }, [products, categories, stockMovements]);
+  }, [authReady, authSource, products, categories, stockMovements]);
 
   useEffect(() => {
+    if (!authReady || authSource === "supabase") {
+      return;
+    }
+
     window.localStorage.setItem(
       "mavapos.operations",
       JSON.stringify({
@@ -709,7 +1286,7 @@ export default function MavaposShell({
         recipes,
       }),
     );
-  }, [ingredients, expenses, recipes]);
+  }, [authReady, authSource, ingredients, expenses, recipes]);
 
   useEffect(() => {
     if (!authReady || authUser || !showSplash) {
@@ -752,6 +1329,7 @@ export default function MavaposShell({
         setAuthUser(mapSupabaseUser(data.session.user));
         setAuthSource("supabase");
         setShowSplash(false);
+        void loadSupabaseData(data.session.user.id);
       } else {
         const storedSession = window.localStorage.getItem("mavapos.session");
 
@@ -782,9 +1360,11 @@ export default function MavaposShell({
 	        setAuthUser(mapSupabaseUser(session.user));
 	        setAuthSource("supabase");
 	        setShowSplash(false);
+	        void loadSupabaseData(session.user.id);
         window.localStorage.removeItem("mavapos.session");
       } else if (authSource === "supabase") {
         setAuthUser(null);
+        setOutletContext(null);
         setAuthSource(null);
       }
     });
@@ -793,7 +1373,7 @@ export default function MavaposShell({
       active = false;
       subscription.unsubscribe();
     };
-  }, [authSource, supabase]);
+  }, [authSource, loadSupabaseData, supabase]);
 
   useEffect(() => {
     if (activeMenu !== "Kasir" || activePromos.length <= 1) {
@@ -835,9 +1415,9 @@ export default function MavaposShell({
       return;
     }
 
-    const currentItem = cart.find((item) => item.id === product.id);
+    const currentItem = cart.find((item) => toId(item.id) === toId(product.id));
     const projectedItems = currentItem
-      ? cart.map((item) => (item.id === product.id ? { ...item, qty: item.qty + 1 } : item))
+      ? cart.map((item) => (toId(item.id) === toId(product.id) ? { ...item, qty: item.qty + 1 } : item))
       : [...cart, { ...product, qty: 1 }];
     const insufficientIngredient = getInsufficientIngredientForCart(projectedItems);
 
@@ -851,7 +1431,7 @@ export default function MavaposShell({
     }
 
     setCart((items) => {
-      const existing = items.find((item) => item.id === product.id);
+      const existing = items.find((item) => toId(item.id) === toId(product.id));
 
       if (existing) {
         if (existing.qty >= product.stock) {
@@ -860,7 +1440,7 @@ export default function MavaposShell({
         }
 
         return items.map((item) =>
-          item.id === product.id ? { ...item, qty: item.qty + 1 } : item,
+          toId(item.id) === toId(product.id) ? { ...item, qty: item.qty + 1 } : item,
         );
       }
 
@@ -869,20 +1449,20 @@ export default function MavaposShell({
     showToast("success", "Produk ditambahkan", `${product.name} masuk ke keranjang.`);
   }
 
-  function updateQty(id: number, change: number) {
+  function updateQty(id: EntityId, change: number) {
     setCart((items) => {
-      const currentItem = items.find((item) => item.id === id);
+      const currentItem = items.find((item) => toId(item.id) === toId(id));
 
       if (!currentItem) {
         return items;
       }
 
-      const latestProduct = products.find((product) => product.id === id);
+      const latestProduct = products.find((product) => toId(product.id) === toId(id));
       const nextQty = currentItem.qty + change;
 
       if (change > 0) {
         const projectedItems = items.map((item) =>
-          item.id === id ? { ...item, qty: nextQty } : item,
+          toId(item.id) === toId(id) ? { ...item, qty: nextQty } : item,
         );
         const insufficientIngredient = getInsufficientIngredientForCart(projectedItems);
 
@@ -902,7 +1482,7 @@ export default function MavaposShell({
       }
 
       return items
-        .map((item) => (item.id === id ? { ...item, qty: nextQty } : item))
+        .map((item) => (toId(item.id) === toId(id) ? { ...item, qty: nextQty } : item))
         .filter((item) => item.qty > 0);
     });
   }
@@ -945,14 +1525,14 @@ export default function MavaposShell({
     showToast("info", "Pembayaran dibuka", "Periksa metode bayar sebelum konfirmasi transaksi.");
   }
 
-  function confirmPayment() {
+  async function confirmPayment() {
     if (!isPaymentReady) {
       showToast("error", "Pembayaran belum siap", "Pastikan total sudah benar dan uang diterima mencukupi.");
       return;
     }
 
     const insufficientItem = cart.find((item) => {
-      const latestProduct = products.find((product) => product.id === item.id);
+      const latestProduct = products.find((product) => toId(product.id) === toId(item.id));
       return !latestProduct || latestProduct.stock < item.qty;
     });
 
@@ -976,18 +1556,150 @@ export default function MavaposShell({
       return;
     }
 
-    cart.forEach((item) => {
-      applyStockChange(item.id, item.qty * -1, "Penjualan", `Transaksi kasir #MV-1049`);
-    });
-    getRecipeRequirementsForCart(cart).forEach((qtyNeeded, ingredientId) => {
+    const invoiceNo = `MV-${nextInvoiceNoRef.current}`;
+    nextInvoiceNoRef.current += 1;
+    let transactionId: string | undefined;
+
+    if (isSupabaseSynced && outletContext) {
+      const { data: transaction, error: transactionError } = await supabase
+        .from("transactions")
+        .insert({
+          outlet_id: outletContext.outletId,
+          invoice_no: invoiceNo,
+          cashier_id: outletContext.profileId,
+          promo_id: typeof appliedPromo?.id === "string" ? appliedPromo.id : null,
+          subtotal,
+          discount,
+          total,
+          payment_method: paymentMethod,
+          cash_received: paymentMethod === "Tunai" ? cashReceived : null,
+          cash_change: paymentMethod === "Tunai" ? cashChange : null,
+          status: "Selesai",
+        })
+        .select("id, invoice_no, subtotal, discount, total, payment_method, status, completed_at")
+        .single();
+
+      if (transactionError || !transaction?.id) {
+        showToast("error", "Transaksi gagal disimpan", transactionError?.message ?? "ID transaksi tidak tersedia.");
+        return;
+      }
+
+      const savedTransaction = mapTransaction(transaction as TransactionRow);
+      transactionId = savedTransaction.id;
+
+      const transactionItems = cart.map((item) => ({
+        transaction_id: transactionId,
+        product_id: typeof item.id === "string" ? item.id : null,
+        product_name: item.name,
+        category_name: item.category,
+        unit_price: item.price,
+        qty: item.qty,
+        line_total: item.price * item.qty,
+      }));
+
+      const { data: savedItems, error: itemsError } = await supabase
+        .from("transaction_items")
+        .insert(transactionItems)
+        .select("id, transaction_id, product_id, product_name, category_name, unit_price, qty, line_total");
+
+      if (itemsError) {
+        showToast("error", "Item transaksi gagal disimpan", itemsError.message);
+        return;
+      }
+
+      setTransactions((items) => [savedTransaction, ...items]);
+      setTransactionItems((items) => [
+        ...items,
+        ...((savedItems ?? []) as TransactionItemRow[]).map(mapTransactionItem),
+      ]);
+    } else {
+      const localTransaction: TransactionRecord = {
+        id: invoiceNo,
+        invoiceNo,
+        subtotal,
+        discount,
+        total,
+        paymentMethod,
+        status: "Selesai",
+        completedAt: new Date().toISOString(),
+      };
+
+      setTransactions((items) => [localTransaction, ...items]);
+      setTransactionItems((items) => [
+        ...items,
+        ...cart.map((item, index) => ({
+          id: `${invoiceNo}-${index}`,
+          transactionId: invoiceNo,
+          productId: item.id,
+          productName: item.name,
+          categoryName: item.category,
+          unitPrice: item.price,
+          qty: item.qty,
+          lineTotal: item.price * item.qty,
+        })),
+      ]);
+    }
+
+    for (const item of cart) {
+      const success = await applyStockChange(
+        item.id,
+        item.qty * -1,
+        "Penjualan",
+        `Transaksi kasir #${invoiceNo}`,
+        { transactionId },
+      );
+
+      if (!success) {
+        return;
+      }
+    }
+
+    for (const [ingredientId, qtyNeeded] of getRecipeRequirementsForCart(cart).entries()) {
+      const ingredient = ingredients.find((item) => toId(item.id) === toId(ingredientId));
+
+      if (!ingredient) {
+        continue;
+      }
+
+      const nextStock = Number((ingredient.stock - qtyNeeded).toFixed(3));
+
+      if (isSupabaseSynced && typeof ingredient.id === "string" && outletContext) {
+        const { error } = await supabase
+          .from("ingredients")
+          .update({ stock: nextStock })
+          .eq("id", ingredient.id);
+
+        if (error) {
+          showToast("error", "Stok bahan gagal disimpan", error.message);
+          return;
+        }
+
+        const { error: movementError } = await supabase.from("ingredient_movements").insert({
+          outlet_id: outletContext.outletId,
+          ingredient_id: ingredient.id,
+          transaction_id: transactionId ?? null,
+          ingredient_name: ingredient.name,
+          qty_change: qtyNeeded * -1,
+          previous_stock: ingredient.stock,
+          next_stock: nextStock,
+          note: `Transaksi kasir #${invoiceNo}`,
+        });
+
+        if (movementError) {
+          showToast("error", "Mutasi bahan gagal disimpan", movementError.message);
+          return;
+        }
+      }
+
       setIngredients((items) =>
-        items.map((ingredient) =>
-          ingredient.id === ingredientId
-            ? { ...ingredient, stock: Number((ingredient.stock - qtyNeeded).toFixed(3)) }
-            : ingredient,
+        items.map((item) =>
+          toId(item.id) === toId(ingredientId)
+            ? { ...item, stock: nextStock }
+            : item,
         ),
       );
-    });
+    }
+
     setPaymentStep("success");
     showToast("success", "Pembayaran berhasil", "Transaksi selesai dan struk siap dikirim.");
   }
@@ -1031,7 +1743,7 @@ export default function MavaposShell({
     setEditingProductId(null);
   }
 
-  function saveProduct() {
+  async function saveProduct() {
     const normalizedForm = {
       ...productForm,
       name: productForm.name.trim(),
@@ -1046,17 +1758,132 @@ export default function MavaposShell({
       return;
     }
 
+    if (isSupabaseSynced && outletContext) {
+      let categoryId = categoryIdByName[normalizedForm.category] ?? null;
+
+      if (!categoryId) {
+        const { data: existingCategory, error: categoryLookupError } = await supabase
+          .from("categories")
+          .select("id, name")
+          .eq("outlet_id", outletContext.outletId)
+          .eq("name", normalizedForm.category)
+          .maybeSingle();
+
+        if (categoryLookupError) {
+          showToast("error", "Kategori gagal dibaca", categoryLookupError.message);
+          return;
+        }
+
+        if (existingCategory?.id) {
+          categoryId = existingCategory.id as string;
+          setCategoryIdByName((items) => ({
+            ...items,
+            [normalizedForm.category]: existingCategory.id as string,
+          }));
+        } else {
+          const { data: createdCategory, error: categoryCreateError } = await supabase
+            .from("categories")
+            .insert({
+              outlet_id: outletContext.outletId,
+              name: normalizedForm.category,
+            })
+            .select("id, name")
+            .single();
+
+          if (categoryCreateError) {
+            showToast("error", "Kategori gagal dibuat", categoryCreateError.message);
+            return;
+          }
+
+          categoryId = createdCategory.id as string;
+          setCategoryIdByName((items) => ({
+            ...items,
+            [normalizedForm.category]: createdCategory.id as string,
+          }));
+          setCategories((items) =>
+            items.some((item) => item.toLowerCase() === normalizedForm.category.toLowerCase())
+              ? items
+              : [...items, normalizedForm.category],
+          );
+        }
+      }
+
+      if (productModal === "edit" && editingProductId && typeof editingProductId === "string") {
+        const { data, error } = await supabase
+          .from("products")
+          .update({
+            category_id: categoryId,
+            name: normalizedForm.name,
+            price: normalizedForm.price,
+            stock: normalizedForm.stock,
+            tag: normalizedForm.tag,
+            image_url: normalizedForm.image,
+          })
+          .eq("id", editingProductId)
+          .select("id, name, price, stock, tag, image_url, categories(name)")
+          .single();
+
+        if (error) {
+          showToast("error", "Produk gagal disimpan", error.message);
+          return;
+        }
+
+        const nextProduct = {
+          ...mapProduct(data as ProductRow),
+          category: normalizedForm.category,
+        };
+        setProducts((items) =>
+          items.map((item) => (toId(item.id) === toId(editingProductId) ? nextProduct : item)),
+        );
+        setCart((items) =>
+          items.map((item) =>
+            toId(item.id) === toId(editingProductId) ? { ...item, ...nextProduct } : item,
+          ),
+        );
+        showToast("success", "Produk diperbarui", `${nextProduct.name} berhasil disimpan.`);
+      } else {
+        const { data, error } = await supabase
+          .from("products")
+          .insert({
+            outlet_id: outletContext.outletId,
+            category_id: categoryId,
+            name: normalizedForm.name,
+            price: normalizedForm.price,
+            stock: normalizedForm.stock,
+            tag: normalizedForm.tag,
+            image_url: normalizedForm.image,
+          })
+          .select("id, name, price, stock, tag, image_url, categories(name)")
+          .single();
+
+        if (error) {
+          showToast("error", "Produk gagal ditambahkan", error.message);
+          return;
+        }
+
+        const nextProduct = {
+          ...mapProduct(data as ProductRow),
+          category: normalizedForm.category,
+        };
+        setProducts((items) => [...items, nextProduct]);
+        showToast("success", "Produk ditambahkan", `${nextProduct.name} tersedia di kasir.`);
+      }
+
+      closeProductModal();
+      return;
+    }
+
     if (productModal === "edit" && editingProductId) {
-      const existingProduct = products.find((item) => item.id === editingProductId);
+      const existingProduct = products.find((item) => toId(item.id) === toId(editingProductId));
 
       setProducts((items) =>
         items.map((item) =>
-          item.id === editingProductId ? { ...item, ...normalizedForm } : item,
+          toId(item.id) === toId(editingProductId) ? { ...item, ...normalizedForm } : item,
         ),
       );
       setCart((items) =>
         items.map((item) =>
-          item.id === editingProductId ? { ...item, ...normalizedForm } : item,
+          toId(item.id) === toId(editingProductId) ? { ...item, ...normalizedForm } : item,
         ),
       );
       if (existingProduct && existingProduct.stock !== normalizedForm.stock) {
@@ -1074,7 +1901,7 @@ export default function MavaposShell({
       setProducts((items) => [
         ...items,
         {
-          id: Math.max(0, ...items.map((item) => item.id)) + 1,
+          id: getNextLocalId(items),
           ...normalizedForm,
         },
       ]);
@@ -1084,13 +1911,25 @@ export default function MavaposShell({
     closeProductModal();
   }
 
-  function confirmDeleteProduct() {
+  async function confirmDeleteProduct() {
     if (!deleteProduct) {
       return;
     }
 
-    setProducts((items) => items.filter((item) => item.id !== deleteProduct.id));
-    setCart((items) => items.filter((item) => item.id !== deleteProduct.id));
+    if (isSupabaseSynced && typeof deleteProduct.id === "string") {
+      const { error } = await supabase
+        .from("products")
+        .update({ is_active: false })
+        .eq("id", deleteProduct.id);
+
+      if (error) {
+        showToast("error", "Produk gagal dihapus", error.message);
+        return;
+      }
+    }
+
+    setProducts((items) => items.filter((item) => toId(item.id) !== toId(deleteProduct.id)));
+    setCart((items) => items.filter((item) => toId(item.id) !== toId(deleteProduct.id)));
     showToast("success", "Produk dihapus", `${deleteProduct.name} dihapus dari data produk.`);
     setDeleteProduct(null);
   }
@@ -1128,7 +1967,7 @@ export default function MavaposShell({
     setEditingPromoId(null);
   }
 
-  function savePromo() {
+  async function savePromo() {
     const normalizedForm = {
       ...promoForm,
       name: promoForm.name.trim(),
@@ -1143,16 +1982,59 @@ export default function MavaposShell({
       return;
     }
 
+    if (isSupabaseSynced && outletContext) {
+      if (promoModal === "edit" && editingPromoId && typeof editingPromoId === "string") {
+        const { data, error } = await supabase
+          .from("promos")
+          .update(normalizedForm)
+          .eq("id", editingPromoId)
+          .select("id, name, code, type, target, value, period, status")
+          .single();
+
+        if (error) {
+          showToast("error", "Promo gagal disimpan", error.message);
+          return;
+        }
+
+        const nextPromo = mapPromo(data as PromoRow);
+        setPromos((items) =>
+          items.map((item) => (toId(item.id) === toId(editingPromoId) ? nextPromo : item)),
+        );
+        showToast("success", "Promo diperbarui", `${nextPromo.name} berhasil disimpan.`);
+      } else {
+        const { data, error } = await supabase
+          .from("promos")
+          .insert({
+            outlet_id: outletContext.outletId,
+            ...normalizedForm,
+          })
+          .select("id, name, code, type, target, value, period, status")
+          .single();
+
+        if (error) {
+          showToast("error", "Promo gagal ditambahkan", error.message);
+          return;
+        }
+
+        const nextPromo = mapPromo(data as PromoRow);
+        setPromos((items) => [...items, nextPromo]);
+        showToast("success", "Promo ditambahkan", `${nextPromo.name} aktif sesuai status yang dipilih.`);
+      }
+
+      closePromoModal();
+      return;
+    }
+
     if (promoModal === "edit" && editingPromoId) {
       setPromos((items) =>
-        items.map((item) => (item.id === editingPromoId ? { ...item, ...normalizedForm } : item)),
+        items.map((item) => (toId(item.id) === toId(editingPromoId) ? { ...item, ...normalizedForm } : item)),
       );
       showToast("success", "Promo diperbarui", `${normalizedForm.name} berhasil disimpan.`);
     } else {
       setPromos((items) => [
         ...items,
         {
-          id: Math.max(0, ...items.map((item) => item.id)) + 1,
+          id: getNextLocalId(items),
           ...normalizedForm,
         },
       ]);
@@ -1162,13 +2044,22 @@ export default function MavaposShell({
     closePromoModal();
   }
 
-  function confirmDeletePromo() {
+  async function confirmDeletePromo() {
     if (!deletePromo) {
       return;
     }
 
-    setPromos((items) => items.filter((item) => item.id !== deletePromo.id));
-    if (deletePromo.id === appliedPromoId) {
+    if (isSupabaseSynced && typeof deletePromo.id === "string") {
+      const { error } = await supabase.from("promos").delete().eq("id", deletePromo.id);
+
+      if (error) {
+        showToast("error", "Promo gagal dihapus", error.message);
+        return;
+      }
+    }
+
+    setPromos((items) => items.filter((item) => toId(item.id) !== toId(deletePromo.id)));
+    if (toId(deletePromo.id) === toId(appliedPromoId ?? "")) {
       removeAppliedPromo({ silent: true });
     }
     showToast("success", "Promo dihapus", `${deletePromo.name} dihapus dari campaign.`);
@@ -1204,7 +2095,7 @@ export default function MavaposShell({
     setEditingStaffId(null);
   }
 
-  function saveStaff() {
+  async function saveStaff() {
     const normalizedForm = {
       ...staffForm,
       name: staffForm.name.trim(),
@@ -1216,16 +2107,62 @@ export default function MavaposShell({
       return;
     }
 
+    if (isSupabaseSynced && outletContext) {
+      if (staffModal === "edit" && editingStaffId && typeof editingStaffId === "string") {
+        const { data, error } = await supabase
+          .from("staff_members")
+          .update(normalizedForm)
+          .eq("id", editingStaffId)
+          .select("id, name, role, phone, shift, status")
+          .single();
+
+        if (error) {
+          showToast("error", "Staf gagal disimpan", error.message);
+          return;
+        }
+
+        const nextStaff = mapStaff(data as StaffRow);
+        setStaffMembers((items) =>
+          items.map((item) => (toId(item.id) === toId(editingStaffId) ? nextStaff : item)),
+        );
+        showToast("success", "Staf diperbarui", `${nextStaff.name} berhasil disimpan.`);
+      } else if (staffMembers.length < 2) {
+        const { data, error } = await supabase
+          .from("staff_members")
+          .insert({
+            outlet_id: outletContext.outletId,
+            ...normalizedForm,
+          })
+          .select("id, name, role, phone, shift, status")
+          .single();
+
+        if (error) {
+          showToast("error", "Staf gagal ditambahkan", error.message);
+          return;
+        }
+
+        const nextStaff = mapStaff(data as StaffRow);
+        setStaffMembers((items) => [...items, nextStaff]);
+        showToast("success", "Staf ditambahkan", `${nextStaff.name} dapat mengakses kasir.`);
+      } else {
+        showToast("error", "Slot staf penuh", "Paket Core membatasi maksimal 2 staf kasir.");
+        return;
+      }
+
+      closeStaffModal();
+      return;
+    }
+
     if (staffModal === "edit" && editingStaffId) {
       setStaffMembers((items) =>
-        items.map((item) => (item.id === editingStaffId ? { ...item, ...normalizedForm } : item)),
+        items.map((item) => (toId(item.id) === toId(editingStaffId) ? { ...item, ...normalizedForm } : item)),
       );
       showToast("success", "Staf diperbarui", `${normalizedForm.name} berhasil disimpan.`);
     } else if (staffMembers.length < 2) {
       setStaffMembers((items) => [
         ...items,
         {
-          id: Math.max(0, ...items.map((item) => item.id)) + 1,
+          id: getNextLocalId(items),
           ...normalizedForm,
         },
       ]);
@@ -1238,17 +2175,26 @@ export default function MavaposShell({
     closeStaffModal();
   }
 
-  function confirmDeleteStaff() {
+  async function confirmDeleteStaff() {
     if (!deleteStaff) {
       return;
     }
 
-    setStaffMembers((items) => items.filter((item) => item.id !== deleteStaff.id));
+    if (isSupabaseSynced && typeof deleteStaff.id === "string") {
+      const { error } = await supabase.from("staff_members").delete().eq("id", deleteStaff.id);
+
+      if (error) {
+        showToast("error", "Staf gagal dihapus", error.message);
+        return;
+      }
+    }
+
+    setStaffMembers((items) => items.filter((item) => toId(item.id) !== toId(deleteStaff.id)));
     showToast("success", "Staf dihapus", `${deleteStaff.name} kehilangan akses kasir.`);
     setDeleteStaff(null);
   }
 
-  function saveCategory() {
+  async function saveCategory() {
     const name = categoryForm.name.trim();
 
     if (!name || categories.some((item) => item.toLowerCase() === name.toLowerCase())) {
@@ -1256,13 +2202,34 @@ export default function MavaposShell({
       return;
     }
 
-    setCategories((items) => [...items, name]);
+    if (isSupabaseSynced && outletContext) {
+      const { data, error } = await supabase
+        .from("categories")
+        .insert({
+          outlet_id: outletContext.outletId,
+          name,
+        })
+        .select("id, name")
+        .single();
+
+      if (error) {
+        showToast("error", "Kategori gagal ditambahkan", error.message);
+        return;
+      }
+
+      const row = data as CategoryRow;
+      setCategoryIdByName((items) => ({ ...items, [row.name]: row.id }));
+      setCategories((items) => [...items, row.name]);
+    } else {
+      setCategories((items) => [...items, name]);
+    }
+
     setCategoryForm({ name: "" });
     setCategoryModal(false);
     showToast("success", "Kategori ditambahkan", `${name} tersedia di filter kasir dan form produk.`);
   }
 
-  function deleteCategory(name: string) {
+  async function deleteCategory(name: string) {
     const isInUse = products.some((product) => product.category === name);
 
     if (isInUse) {
@@ -1274,7 +2241,25 @@ export default function MavaposShell({
       return;
     }
 
+    if (isSupabaseSynced) {
+      const categoryId = categoryIdByName[name];
+
+      if (categoryId) {
+        const { error } = await supabase.from("categories").delete().eq("id", categoryId);
+
+        if (error) {
+          showToast("error", "Kategori gagal dihapus", error.message);
+          return;
+        }
+      }
+    }
+
     setCategories((items) => items.filter((item) => item !== name));
+    setCategoryIdByName((items) => {
+      const nextItems = { ...items };
+      delete nextItems[name];
+      return nextItems;
+    });
     if (category === name) {
       setCategory("Semua");
     }
@@ -1315,7 +2300,7 @@ export default function MavaposShell({
     setEditingIngredientId(null);
   }
 
-  function saveIngredient() {
+  async function saveIngredient() {
     const normalizedForm = {
       ...ingredientForm,
       name: ingredientForm.name.trim(),
@@ -1334,10 +2319,61 @@ export default function MavaposShell({
       return;
     }
 
+    if (isSupabaseSynced && outletContext) {
+      const dbPayload = {
+        name: normalizedForm.name,
+        unit: normalizedForm.unit,
+        stock: normalizedForm.stock,
+        min_stock: normalizedForm.minStock,
+        cost_per_unit: normalizedForm.costPerUnit,
+      };
+
+      if (ingredientModal === "edit" && editingIngredientId && typeof editingIngredientId === "string") {
+        const { data, error } = await supabase
+          .from("ingredients")
+          .update(dbPayload)
+          .eq("id", editingIngredientId)
+          .select("id, name, unit, stock, min_stock, cost_per_unit")
+          .single();
+
+        if (error) {
+          showToast("error", "Bahan gagal disimpan", error.message);
+          return;
+        }
+
+        const nextIngredient = mapIngredient(data as IngredientRow);
+        setIngredients((items) =>
+          items.map((item) => (toId(item.id) === toId(editingIngredientId) ? nextIngredient : item)),
+        );
+        showToast("success", "Bahan diperbarui", `${nextIngredient.name} berhasil disimpan.`);
+      } else {
+        const { data, error } = await supabase
+          .from("ingredients")
+          .insert({
+            outlet_id: outletContext.outletId,
+            ...dbPayload,
+          })
+          .select("id, name, unit, stock, min_stock, cost_per_unit")
+          .single();
+
+        if (error) {
+          showToast("error", "Bahan gagal ditambahkan", error.message);
+          return;
+        }
+
+        const nextIngredient = mapIngredient(data as IngredientRow);
+        setIngredients((items) => [...items, nextIngredient]);
+        showToast("success", "Bahan ditambahkan", `${nextIngredient.name} siap dipakai dalam racikan menu.`);
+      }
+
+      closeIngredientModal();
+      return;
+    }
+
     if (ingredientModal === "edit" && editingIngredientId) {
       setIngredients((items) =>
         items.map((item) =>
-          item.id === editingIngredientId ? { id: editingIngredientId, ...normalizedForm } : item,
+          toId(item.id) === toId(editingIngredientId) ? { id: editingIngredientId, ...normalizedForm } : item,
         ),
       );
       showToast("success", "Bahan diperbarui", `${normalizedForm.name} berhasil disimpan.`);
@@ -1345,7 +2381,7 @@ export default function MavaposShell({
       setIngredients((items) => [
         ...items,
         {
-          id: Math.max(0, ...items.map((item) => item.id)) + 1,
+          id: getNextLocalId(items),
           ...normalizedForm,
         },
       ]);
@@ -1355,12 +2391,21 @@ export default function MavaposShell({
     closeIngredientModal();
   }
 
-  function confirmDeleteIngredient() {
+  async function confirmDeleteIngredient() {
     if (!deleteIngredient) {
       return;
     }
 
-    setIngredients((items) => items.filter((item) => item.id !== deleteIngredient.id));
+    if (isSupabaseSynced && typeof deleteIngredient.id === "string") {
+      const { error } = await supabase.from("ingredients").delete().eq("id", deleteIngredient.id);
+
+      if (error) {
+        showToast("error", "Bahan gagal dihapus", error.message);
+        return;
+      }
+    }
+
+    setIngredients((items) => items.filter((item) => toId(item.id) !== toId(deleteIngredient.id)));
     showToast("success", "Bahan dihapus", `${deleteIngredient.name} dihapus dari daftar bahan.`);
     setDeleteIngredient(null);
   }
@@ -1398,7 +2443,7 @@ export default function MavaposShell({
     setEditingExpenseId(null);
   }
 
-  function saveExpense() {
+  async function saveExpense() {
     const normalizedForm = {
       ...expenseForm,
       title: expenseForm.title.trim(),
@@ -1412,10 +2457,64 @@ export default function MavaposShell({
       return;
     }
 
+    if (isSupabaseSynced && outletContext) {
+      const dbPayload = {
+        title: normalizedForm.title,
+        category: normalizedForm.category,
+        amount: normalizedForm.amount,
+        expense_date: normalizedForm.date,
+        payment_method: normalizedForm.paymentMethod,
+        note: normalizedForm.note,
+        status: normalizedForm.status,
+        created_by: outletContext.profileId,
+      };
+
+      if (expenseModal === "edit" && editingExpenseId && typeof editingExpenseId === "string") {
+        const { data, error } = await supabase
+          .from("expenses")
+          .update(dbPayload)
+          .eq("id", editingExpenseId)
+          .select("id, title, category, amount, expense_date, payment_method, note, status")
+          .single();
+
+        if (error) {
+          showToast("error", "Pengeluaran gagal disimpan", error.message);
+          return;
+        }
+
+        const nextExpense = mapExpense(data as ExpenseRow);
+        setExpenses((items) =>
+          items.map((item) => (toId(item.id) === toId(editingExpenseId) ? nextExpense : item)),
+        );
+        showToast("success", "Pengeluaran diperbarui", `${nextExpense.title} berhasil disimpan.`);
+      } else {
+        const { data, error } = await supabase
+          .from("expenses")
+          .insert({
+            outlet_id: outletContext.outletId,
+            ...dbPayload,
+          })
+          .select("id, title, category, amount, expense_date, payment_method, note, status")
+          .single();
+
+        if (error) {
+          showToast("error", "Pengeluaran gagal ditambahkan", error.message);
+          return;
+        }
+
+        const nextExpense = mapExpense(data as ExpenseRow);
+        setExpenses((items) => [nextExpense, ...items]);
+        showToast("success", "Pengeluaran ditambahkan", `${nextExpense.title} berhasil dicatat.`);
+      }
+
+      closeExpenseModal();
+      return;
+    }
+
     if (expenseModal === "edit" && editingExpenseId) {
       setExpenses((items) =>
         items.map((item) =>
-          item.id === editingExpenseId ? { id: editingExpenseId, ...normalizedForm } : item,
+          toId(item.id) === toId(editingExpenseId) ? { id: editingExpenseId, ...normalizedForm } : item,
         ),
       );
       showToast("success", "Pengeluaran diperbarui", `${normalizedForm.title} berhasil disimpan.`);
@@ -1423,7 +2522,7 @@ export default function MavaposShell({
       setExpenses((items) => [
         ...items,
         {
-          id: Math.max(0, ...items.map((item) => item.id)) + 1,
+          id: getNextLocalId(items),
           ...normalizedForm,
         },
       ]);
@@ -1433,20 +2532,29 @@ export default function MavaposShell({
     closeExpenseModal();
   }
 
-  function confirmDeleteExpense() {
+  async function confirmDeleteExpense() {
     if (!deleteExpense) {
       return;
     }
 
-    setExpenses((items) => items.filter((item) => item.id !== deleteExpense.id));
+    if (isSupabaseSynced && typeof deleteExpense.id === "string") {
+      const { error } = await supabase.from("expenses").delete().eq("id", deleteExpense.id);
+
+      if (error) {
+        showToast("error", "Pengeluaran gagal dihapus", error.message);
+        return;
+      }
+    }
+
+    setExpenses((items) => items.filter((item) => toId(item.id) !== toId(deleteExpense.id)));
     showToast("success", "Pengeluaran dihapus", `${deleteExpense.title} dihapus dari catatan pengeluaran.`);
     setDeleteExpense(null);
   }
 
-  function saveStockAdjustment() {
+  async function saveStockAdjustment() {
     const qty = Number(stockAdjustmentForm.qty);
-    const productId = Number(stockAdjustmentForm.productId);
-    const selectedProduct = products.find((product) => product.id === productId);
+    const productId = stockAdjustmentForm.productId;
+    const selectedProduct = products.find((product) => toId(product.id) === toId(productId));
     const normalizedNote = stockAdjustmentForm.note.trim();
 
     if (!selectedProduct || qty <= 0) {
@@ -1455,7 +2563,7 @@ export default function MavaposShell({
     }
 
     const qtyChange = stockAdjustmentForm.type === "Stok masuk" ? qty : qty * -1;
-    const success = applyStockChange(
+    const success = await applyStockChange(
       productId,
       qtyChange,
       stockAdjustmentForm.type,
@@ -1480,7 +2588,7 @@ export default function MavaposShell({
     );
   }
 
-  function saveStockOpname() {
+  async function saveStockOpname() {
     const changedRows = products
       .map((product) => {
         const row = opnameInputs[String(product.id)];
@@ -1504,22 +2612,18 @@ export default function MavaposShell({
       return;
     }
 
-    changedRows.forEach(({ product, actualStock, note, diff }) => {
-      setProducts((items) =>
-        items.map((item) => (item.id === product.id ? { ...item, stock: actualStock } : item)),
-      );
-      setCart((items) =>
-        items.map((item) => (item.id === product.id ? { ...item, stock: actualStock } : item)),
-      );
-      logStockMovement(
-        product,
-        "Stok opname",
+    for (const { product, note, diff } of changedRows) {
+      const success = await applyStockChange(
+        product.id,
         diff,
-        product.stock,
-        actualStock,
+        "Stok opname",
         note || "Penyesuaian dari stok opname",
       );
-    });
+
+      if (!success) {
+        return;
+      }
+    }
 
     setOpnameInputs({});
     showToast("success", "Stok opname disimpan", `${changedRows.length} produk berhasil disesuaikan.`);
@@ -1540,9 +2644,10 @@ export default function MavaposShell({
 
     if (!error && data.user) {
       const user = mapSupabaseUser(data.user);
-	      setAuthUser(user);
+      setAuthUser(user);
 	      setAuthSource("supabase");
 	      setShowSplash(false);
+      void loadSupabaseData(data.user.id);
 	      setActiveMenu("Dashboard");
 	      window.localStorage.removeItem("mavapos.session");
 	      setAuthSubmitting(false);
@@ -1567,6 +2672,7 @@ export default function MavaposShell({
 	
 	    setAuthUser(matchedUser.user);
 	    setAuthSource("demo");
+	    setOutletContext(null);
 	    setShowSplash(false);
 	    setActiveMenu("Dashboard");
 	    setAuthError("");
@@ -1618,6 +2724,7 @@ export default function MavaposShell({
 	      setAuthUser(mapSupabaseUser(data.session.user));
 	      setAuthSource("supabase");
 	      setShowSplash(false);
+	      void loadSupabaseData(data.session.user.id);
 	      setActiveMenu("Dashboard");
 	      window.localStorage.removeItem("mavapos.session");
 	      showToast("success", "Registrasi berhasil", "Akun owner berhasil dibuat.");
@@ -1711,6 +2818,7 @@ export default function MavaposShell({
 	    }
 
     setAuthUser(null);
+    setOutletContext(null);
     setAuthSource(null);
 	    setShowSplash(true);
 	    setActiveMenu("Dashboard");
@@ -2237,6 +3345,12 @@ export default function MavaposShell({
 	              </div>
             </header>
 
+            {dataLoading && authSource === "supabase" && (
+              <div className="mt-4 rounded-lg border border-[#bfdbfe] bg-[#eff6ff] px-4 py-3 text-sm font-medium text-[#075985]">
+                Menyinkronkan data outlet dari Supabase...
+              </div>
+            )}
+
             {activeMenu === "Dashboard" ? (
               <>
                 <section className="mt-6 grid gap-3 xl:grid-cols-4">
@@ -2290,18 +3404,18 @@ export default function MavaposShell({
                     </div>
                   </article>
 
-                  {[
-                    {
-                      label: "Persentase profit",
-                      value: 24,
-                      note: "Laba bersih bergerak stabil dari kategori minuman.",
-                    },
-                    {
-                      label: "Persentase margin",
-                      value: 18,
-                      note: "Margin rata-rata terjaga dengan diskon terkendali.",
-                    },
-                  ].map((item) => (
+	                  {[
+	                    {
+	                      label: "Persentase profit",
+	                      value: profitPercent,
+	                      note: `${formatCurrency(todayNetProfit)} estimasi setelah pengeluaran hari ini.`,
+	                    },
+	                    {
+	                      label: "Persentase margin",
+	                      value: discountPercent,
+	                      note: `${formatCurrency(todayTransactions.reduce((sum, transaction) => sum + transaction.discount, 0))} diskon tercatat hari ini.`,
+	                    },
+	                  ].map((item) => (
                     <article key={item.label} className="rounded-lg border border-[#dde3da] bg-white p-4">
                       <h2 className="font-semibold">{item.label}</h2>
                       <div className="mt-6 flex items-center justify-center">
@@ -2766,7 +3880,7 @@ export default function MavaposShell({
 	                    ["Bahan menipis", `${lowIngredientCount}`, "Perlu restock segera"],
 	                    [
 	                      "Dipakai di menu",
-	                      `${ingredients.filter((item) => (ingredientUsageMap[item.id] ?? []).length > 0).length}`,
+	                      `${ingredients.filter((item) => (ingredientUsageMap[toId(item.id)] ?? []).length > 0).length}`,
 	                      "Sudah terhubung ke resep produk",
 	                    ],
 	                  ].map(([label, value, note]) => (
@@ -2817,7 +3931,7 @@ export default function MavaposShell({
 	                          </Badge>
 	                        </div>
 	                        <p className="mt-3 text-sm text-[#69756f]">
-	                          Dipakai di: {(ingredientUsageMap[ingredient.id] ?? []).join(", ") || "Belum dipakai di menu"}
+	                          Dipakai di: {(ingredientUsageMap[toId(ingredient.id)] ?? []).join(", ") || "Belum dipakai di menu"}
 	                        </p>
 	                        <div className="mt-3 flex justify-end gap-2">
 	                          <Button variant="outline" size="sm" onClick={() => openEditIngredient(ingredient)}>
@@ -2866,7 +3980,7 @@ export default function MavaposShell({
 	                              {formatCurrency(ingredient.costPerUnit)}
 	                            </TableCell>
 	                            <TableCell className="max-w-[280px] whitespace-normal text-[#69756f]">
-	                              {(ingredientUsageMap[ingredient.id] ?? []).join(", ") || "Belum dipakai di menu"}
+	                              {(ingredientUsageMap[toId(ingredient.id)] ?? []).join(", ") || "Belum dipakai di menu"}
 	                            </TableCell>
 	                            <TableCell>
 	                              <div className="flex justify-end gap-2">
@@ -3326,9 +4440,9 @@ export default function MavaposShell({
 	              <>
 	                <section className="mt-6 grid gap-3 md:grid-cols-3">
 	                  {[
-	                    ["Penjualan hari ini", formatCurrency(1425000), "38 transaksi selesai"],
-	                    ["Rata-rata transaksi", formatCurrency(37500), "Naik 8% dari kemarin"],
-	                    ["Produk terjual", "96 item", "FnB menyumbang 72%"],
+	                    ["Penjualan hari ini", formatCurrency(todaySalesTotal), `${todayTransactions.length} transaksi selesai`],
+	                    ["Rata-rata transaksi", formatCurrency(averageTransaction), yesterdaySalesTotal > 0 ? `${salesGrowth >= 0 ? "Naik" : "Turun"} ${Math.abs(salesGrowth)}% dari kemarin` : "Belum ada pembanding kemarin"],
+	                    ["Produk terjual", `${todayItemsSold} item`, todayItemsSold > 0 ? `FnB menyumbang ${fnBShare}%` : "Belum ada produk terjual hari ini"],
 	                  ].map(([label, value, note]) => (
 	                    <div key={label} className="rounded-lg border border-[#dde3da] bg-white p-4">
 	                      <p className="text-sm font-medium text-[#69756f]">{label}</p>
@@ -3346,14 +4460,10 @@ export default function MavaposShell({
 	                        Pantau omzet, transaksi, dan performa kategori outlet.
 	                      </p>
 	                    </div>
-	                    <div className="grid gap-3 p-4">
-	                      {[
-	                        ["Tunai", formatCurrency(820000), "22 transaksi"],
-	                        ["QRIS", formatCurrency(605000), "16 transaksi"],
-	                        ["Promo digunakan", formatCurrency(78000), "12 transaksi"],
-	                      ].map(([label, value, note]) => (
-	                        <div
-	                          key={label}
+		                    <div className="grid gap-3 p-4">
+		                      {[...paymentSummary, promoUsageSummary].map(({ label, value, note }) => (
+		                        <div
+		                          key={label}
 	                          className="flex items-center justify-between rounded-lg bg-[#fbfcfa] p-3"
 	                        >
 	                          <div>
@@ -3366,21 +4476,25 @@ export default function MavaposShell({
 	                    </div>
 	                  </div>
 
-	                  <aside className="rounded-lg border border-[#dde3da] bg-white p-4">
-	                    <h2 className="font-semibold">Produk terlaris</h2>
-	                    <div className="mt-4 grid gap-3">
-	                      {products.slice(0, 4).map((product, index) => (
-	                        <div key={product.id} className="flex items-center justify-between gap-3">
-	                          <div className="min-w-0">
-	                            <p className="truncate text-sm font-semibold">{product.name}</p>
-	                            <p className="mt-0.5 text-xs text-[#69756f]">
-	                              {product.category} · {product.tag}
-	                            </p>
-	                          </div>
-	                          <Badge variant={index === 0 ? "default" : "outline"}>
-	                            {24 - index * 4} terjual
-	                          </Badge>
-	                        </div>
+		                  <aside className="rounded-lg border border-[#dde3da] bg-white p-4">
+		                    <h2 className="font-semibold">Produk terlaris</h2>
+		                    <div className="mt-4 grid gap-3">
+		                      {(bestSellingProducts.length > 0 ? bestSellingProducts : products.slice(0, 4).map((product) => ({
+		                        name: product.name,
+		                        category: product.category,
+		                        qty: 0,
+		                      }))).map((product, index) => (
+		                        <div key={`${product.name}-${index}`} className="flex items-center justify-between gap-3">
+		                          <div className="min-w-0">
+		                            <p className="truncate text-sm font-semibold">{product.name}</p>
+		                            <p className="mt-0.5 text-xs text-[#69756f]">
+		                              {product.category}
+		                            </p>
+		                          </div>
+		                          <Badge variant={index === 0 ? "default" : "outline"}>
+		                            {product.qty} terjual
+		                          </Badge>
+		                        </div>
 	                      ))}
 	                    </div>
 	                  </aside>
