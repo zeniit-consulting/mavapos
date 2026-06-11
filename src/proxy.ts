@@ -6,6 +6,12 @@ export async function proxy(request: NextRequest) {
     request,
   });
 
+  const publicPaths = new Set(["/", "/login"]);
+
+  if (publicPaths.has(request.nextUrl.pathname)) {
+    return response;
+  }
+
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -27,7 +33,11 @@ export async function proxy(request: NextRequest) {
     },
   );
 
-  await supabase.auth.getUser();
+  try {
+    await supabase.auth.getUser();
+  } catch {
+    // Keep local pages usable when Supabase is unreachable; auth submit still reports real errors.
+  }
 
   return response;
 }

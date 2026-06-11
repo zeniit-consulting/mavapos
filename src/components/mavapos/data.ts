@@ -19,6 +19,10 @@ import type {
   ProductRecipe,
   Promo,
   StaffMember,
+  Customer,
+  IngredientMovement,
+  Supplier,
+  CashierShift,
 } from "./types";
 
 export const initialProducts: Product[] = [
@@ -28,6 +32,7 @@ export const initialProducts: Product[] = [
     category: "FnB",
     price: 18000,
     stock: 18,
+    costPrice: 11000,
     tag: "Terlaris",
     image:
       "https://images.unsplash.com/photo-1562967916-eb82221dfb92?auto=format&fit=crop&w=600&q=80",
@@ -38,6 +43,7 @@ export const initialProducts: Product[] = [
     category: "FnB",
     price: 16000,
     stock: 24,
+    costPrice: 6500,
     tag: "Promo",
     image:
       "https://images.unsplash.com/photo-1461023058943-07fcbe16d735?auto=format&fit=crop&w=600&q=80",
@@ -48,6 +54,7 @@ export const initialProducts: Product[] = [
     category: "FnB",
     price: 22000,
     stock: 11,
+    costPrice: 13000,
     tag: "Dapur",
     image:
       "https://images.unsplash.com/photo-1612929633738-8fe44f7ec841?auto=format&fit=crop&w=600&q=80",
@@ -58,6 +65,7 @@ export const initialProducts: Product[] = [
     category: "Retail",
     price: 8500,
     stock: 6,
+    costPrice: 5000,
     tag: "Stok tipis",
     image:
       "https://images.unsplash.com/photo-1509440159596-0249088772ff?auto=format&fit=crop&w=600&q=80",
@@ -68,6 +76,7 @@ export const initialProducts: Product[] = [
     category: "Retail",
     price: 5000,
     stock: 42,
+    costPrice: 2800,
     tag: "Cepat",
     image:
       "https://images.unsplash.com/photo-1523362628745-0c100150b504?auto=format&fit=crop&w=600&q=80",
@@ -78,6 +87,7 @@ export const initialProducts: Product[] = [
     category: "Retail",
     price: 12000,
     stock: 15,
+    costPrice: 7000,
     tag: "Barcode",
     image:
       "https://images.unsplash.com/photo-1566478989037-eec170784d0b?auto=format&fit=crop&w=600&q=80",
@@ -343,3 +353,64 @@ export const demoUsers = [
     },
   },
 ] satisfies { email: string; password: string; user: AuthUser }[];
+
+export const initialCustomers: Customer[] = [
+  {
+    id: 1,
+    name: "Budi Santoso",
+    phone: "0812-3456-7890",
+    email: "budi@gmail.com",
+    points: 150,
+  },
+  {
+    id: 2,
+    name: "Sari Coffee Member",
+    phone: "0877-6655-4433",
+    email: "sari@coffee.com",
+    points: 340,
+  },
+];
+
+export const initialIngredientMovements: IngredientMovement[] = [
+  {
+    id: 1,
+    ingredientId: 1,
+    ingredientName: "Es Batu",
+    qtyChange: 50,
+    previousStock: 10,
+    nextStock: 60,
+    note: "Restock es batu",
+    createdAt: "2026-05-17T08:00:00Z",
+  },
+  {
+    id: 2,
+    ingredientId: 2,
+    ingredientName: "Gula Cair",
+    qtyChange: -2,
+    previousStock: 15,
+    nextStock: 13,
+    note: "Pemakaian menu Es Kopi Susu",
+    createdAt: "2026-05-17T12:00:00Z",
+  },
+];
+
+export const initialSuppliers: Supplier[] = [
+  {
+    id: 1,
+    name: "CV. Sentosa Abadi",
+    phone: "0812-9988-7766",
+    email: "sentosa@vendor.com",
+    address: "Jl. Industri No. 45, Jakarta",
+    createdAt: "2026-05-18T00:00:00Z",
+  },
+  {
+    id: 2,
+    name: "PT. Dapur Nusantara",
+    phone: "0856-4433-2211",
+    email: "nusantara@kitchen.com",
+    address: "Kawasan Pergudangan Blok C, Bekasi",
+    createdAt: "2026-05-18T00:00:00Z",
+  },
+];
+
+export const initialCashierShifts: CashierShift[] = [];

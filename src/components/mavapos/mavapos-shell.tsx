@@ -4,6 +4,7 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import {
   BadgePercent,
+  Bluetooth,
   Boxes,
   CalendarDays,
   Check,
@@ -103,6 +104,12 @@ import type {
   StaffForm,
   StaffMember,
 } from "./types";
+import {
+  getDefaultBluetoothPrinterName,
+  printReceipt,
+  selectDefaultBluetoothPrinter,
+  type ReceiptData,
+} from "@/lib/thermal-print";
 
 function normalizePromoCode(value: string) {
   return value.replace(/[^a-z0-9]/gi, "").toUpperCase();
@@ -148,6 +155,7 @@ type ProductRow = {
   name: string;
   price: number;
   stock: number | string;
+  cost_price?: number | null;
   tag: string | null;
   image_url: string | null;
   categories?: { name: string } | { name: string }[] | null;
@@ -265,6 +273,7 @@ function mapProduct(row: ProductRow): Product {
     category: category?.name ?? "Tanpa kategori",
     price: row.price,
     stock: Number(row.stock),
+    costPrice: Number(row.cost_price ?? 0),
     tag: row.tag ?? "Reguler",
     image: row.image_url ?? defaultProductImage,
   };
@@ -571,13 +580,17 @@ function TablePagination({
 
 export default function MavaposShell({
   initialMenu = "Kasir",
+  initialAuthReady = false,
+  initialShowSplash = true,
 }: {
   initialMenu?: MenuLabel;
+  initialAuthReady?: boolean;
+  initialShowSplash?: boolean;
 }) {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
-  const [showSplash, setShowSplash] = useState(true);
-  const [authReady, setAuthReady] = useState(false);
+  const [showSplash, setShowSplash] = useState(initialShowSplash);
+  const [authReady, setAuthReady] = useState(initialAuthReady);
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
   const [outletContext, setOutletContext] = useState<OutletContext | null>(null);
   const [dataLoading, setDataLoading] = useState(false);
@@ -646,9 +659,11 @@ export default function MavaposShell({
   const [staffModal, setStaffModal] = useState<"create" | "edit" | null>(null);
   const [expenseModal, setExpenseModal] = useState<"create" | "edit" | null>(null);
   const [paymentModal, setPaymentModal] = useState(false);
+  const [mobileCartOpen, setMobileCartOpen] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("Tunai");
   const [cashReceived, setCashReceived] = useState(50000);
   const [paymentStep, setPaymentStep] = useState<"form" | "success">("form");
+  const [defaultPrinterName, setDefaultPrinterName] = useState<string | null>(null);
   const [editingProductId, setEditingProductId] = useState<EntityId | null>(null);
   const [editingIngredientId, setEditingIngredientId] = useState<EntityId | null>(null);
   const [editingPromoId, setEditingPromoId] = useState<EntityId | null>(null);
@@ -663,6 +678,14 @@ export default function MavaposShell({
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const nextToastIdRef = useRef(0);
   const nextInvoiceNoRef = useRef(1049);
+  const lastReceiptRef = useRef<ReceiptData | null>(null);
+
+  useEffect(() => {
+    window.setTimeout(() => {
+      setDefaultPrinterName(getDefaultBluetoothPrinterName());
+    }, 0);
+  }, []);
+
   const [stockMovements, setStockMovements] = useState<StockMovement[]>(
     () => getStoredInventory()?.stockMovements ?? [],
   );
@@ -685,6 +708,7 @@ export default function MavaposShell({
     name: "",
     category: "FnB",
     price: 0,
+    costPrice: 0,
     stock: 0,
     tag: "",
     image: defaultProductImage,
@@ -1082,9 +1106,17 @@ export default function MavaposShell({
     setPromos(((promosResult.data ?? []) as PromoRow[]).map(mapPromo));
     setStaffMembers(((staffResult.data ?? []) as StaffRow[]).map(mapStaff));
     setExpenses(((expensesResult.data ?? []) as ExpenseRow[]).map(mapExpense));
-    setTransactions(((transactionsResult.data ?? []) as TransactionRow[]).map(mapTransaction));
+    const nextTransactions = ((transactionsResult.data ?? []) as TransactionRow[]).map(mapTransaction);
+    setTransactions(nextTransactions);
     setTransactionItems(((transactionItemsResult.data ?? []) as TransactionItemRow[]).map(mapTransactionItem));
     setStockMovements(((stockMovementsResult.data ?? []) as StockMovementRow[]).map(mapStockMovement));
+
+    const maxInvoice = nextTransactions.reduce((max, t) => {
+      const num = parseInt(t.invoiceNo.replace("MV-", ""), 10);
+      return isNaN(num) ? max : Math.max(max, num);
+    }, 0);
+    nextInvoiceNoRef.current = Math.max(nextInvoiceNoRef.current, maxInvoice + 1);
+
     setCart([]);
     setDataLoading(false);
   }, [showToast, supabase]);
@@ -1345,6 +1377,10 @@ export default function MavaposShell({
       }
 
       setAuthReady(true);
+    }).catch(() => {
+      if (active) {
+        setAuthReady(true);
+      }
     });
 
     const {
@@ -1702,6 +1738,48 @@ export default function MavaposShell({
 
     setPaymentStep("success");
     showToast("success", "Pembayaran berhasil", "Transaksi selesai dan struk siap dikirim.");
+
+    const now = new Date();
+    lastReceiptRef.current = {
+      outletName: authUser?.outlet ?? "Outlet Saya",
+      outletAddress: "",
+      invoiceNo,
+      cashierName: authUser?.name ?? "Kasir",
+      items: cart.map((item) => ({
+        name: item.name,
+        qty: item.qty,
+        price: item.price,
+        total: item.price * item.qty,
+      })),
+      subtotal,
+      discount,
+      promoName: appliedPromo?.name,
+      total,
+      paymentMethod,
+      cashReceived: paymentMethod === "Tunai" ? cashReceived : undefined,
+      cashChange: paymentMethod === "Tunai" ? cashChange : undefined,
+      completedAt: now.toLocaleDateString("id-ID", {
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      }),
+    };
+  }
+
+  async function printStruk() {
+    if (!lastReceiptRef.current) return;
+    await printReceipt(lastReceiptRef.current);
+    setDefaultPrinterName(getDefaultBluetoothPrinterName());
+  }
+
+  async function saveDefaultPrinter() {
+    const printerName = await selectDefaultBluetoothPrinter();
+    if (!printerName) return;
+
+    setDefaultPrinterName(printerName);
+    showToast("success", "Printer default tersimpan", printerName);
   }
 
   function finishPayment() {
@@ -1709,6 +1787,7 @@ export default function MavaposShell({
     removeAppliedPromo({ silent: true });
     setPaymentModal(false);
     setPaymentStep("form");
+    lastReceiptRef.current = null;
     showToast("success", "Transaksi baru", "Keranjang dikosongkan untuk transaksi berikutnya.");
   }
 
@@ -1717,6 +1796,7 @@ export default function MavaposShell({
       name: "",
       category: "FnB",
       price: 0,
+      costPrice: 0,
       stock: 0,
       tag: "",
       image: defaultProductImage,
@@ -1730,6 +1810,7 @@ export default function MavaposShell({
       name: product.name,
       category: product.category,
       price: product.price,
+      costPrice: product.costPrice,
       stock: product.stock,
       tag: product.tag,
       image: product.image,
@@ -2858,15 +2939,26 @@ export default function MavaposShell({
 	      <main className="auth-scope min-h-screen bg-[#f7faf8] text-foreground">
 	        <ToastViewport toasts={toasts} onDismiss={dismissToast} />
 	        <div className="grid min-h-screen lg:grid-cols-[minmax(0,1fr)_460px]">
-		          <section className="hidden flex-col justify-between bg-[#0369a1] p-10 text-white lg:flex">
+	          <section className="relative hidden flex-col justify-between overflow-hidden p-10 text-white lg:flex">
+		            <Image
+		              src="https://images.unsplash.com/photo-1554774853-719586f82d77?auto=format&fit=crop&w=1920&q=80"
+		              alt=""
+		              fill
+		              className="object-cover"
+		              sizes="50vw"
+		              priority
+		            />
+		            <div className="absolute inset-0 bg-[#0369a1]/80" />
+		            <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-black/20" />
+		            <div className="relative z-10 flex flex-col justify-between min-h-full">
 		            <div>
 		              <LoginLogo className="h-auto w-36" />
 		            </div>
-	            <div className="max-w-xl">
-	              <Badge className="bg-white text-[#075985] hover:bg-white">POS UMKM FnB & Retail</Badge>
-	              <h1 className="mt-5 text-4xl font-semibold tracking-tight">
-	                Operasional outlet lebih rapi dari kasir sampai laporan.
-	              </h1>
+		            <div className="max-w-xl">
+		              <Badge className="bg-white text-[#075985] hover:bg-white">POS UMKM FnB & Retail</Badge>
+		              <h1 className="mt-5 text-5xl font-semibold tracking-tight leading-tight">
+		                Operasional outlet lebih rapi dari kasir sampai laporan.
+		              </h1>
 	              <p className="mt-4 max-w-lg text-sm leading-6 text-white/80">
 	                MAVA membantu tim FnB dan retail memproses transaksi, memantau stok, mengatur promo, dan membaca performa outlet secara praktis.
 	              </p>
@@ -2883,8 +2975,9 @@ export default function MavaposShell({
 	              <div>
 	                <strong className="block text-lg text-white">Laporan</strong>
 	                <span>Data siap baca</span>
-	              </div>
-	            </div>
+		              </div>
+		            </div>
+		          </div>
 	          </section>
 	
 		          <section className="flex items-center justify-center px-5 py-10">
@@ -3221,24 +3314,24 @@ export default function MavaposShell({
 
 	        <section
 	          className={`grid min-h-screen grid-cols-1 ${
-	            activeMenu === "Kasir" ? "xl:grid-cols-[minmax(0,1fr)_360px]" : ""
+	            activeMenu === "Kasir" ? "max-xl:grid-cols-1 xl:grid-cols-[minmax(0,1fr)_360px]" : ""
 	          } ${activeMenu === "Kasir" ? "cashier-scope" : ""}`}
 	        >
-		          <div className="px-5 py-5 md:px-8">
+		          <div className="px-3 py-3 md:px-5 md:py-5 lg:px-8">
 		            <header className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-		              <div className="flex items-center gap-3">
+		              <div className="flex items-center gap-2 min-w-0">
 		                {activeMenu === "Kasir" && (
-		                  <MavaLogo className="h-7 w-24" />
+		                  <MavaLogo className="shrink-0 h-6 w-20 md:h-7 md:w-24" />
 		                )}
-		                <div>
-		                  <p className="text-sm font-medium text-[#69756f]">{authUser.outlet}</p>
-		                  <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">
+		                <div className="min-w-0">
+		                  <p className="text-xs md:text-sm font-medium text-[#69756f] truncate">{authUser.outlet}</p>
+		                  <h1 className="text-lg md:text-2xl lg:text-3xl font-semibold tracking-tight">
 		                    {activeMenu}
 		                  </h1>
 		                </div>
 		              </div>
-	              <div className="flex flex-wrap items-center gap-2">
-                {activeMenu === "Produk & Stok" ? (
+	              <div className="flex flex-wrap items-center gap-1.5 md:gap-2">
+	                {activeMenu === "Produk & Stok" ? (
                   <>
                     {stockView === "products" ? (
                       <>
@@ -3312,7 +3405,7 @@ export default function MavaposShell({
                   <>
                     <button
                       onClick={() => changeMenu("Dashboard")}
-                      className="flex h-10 items-center gap-2 rounded-lg border border-input bg-background px-3 text-sm font-semibold"
+                      className="hidden md:flex h-10 items-center gap-2 rounded-lg border border-input bg-background px-3 text-sm font-semibold"
                     >
                       <ReceiptText size={17} />
                       Dashboard
@@ -3320,25 +3413,27 @@ export default function MavaposShell({
                     {canManageOutlet && (
                       <button
                         onClick={() => changeMenu("Produk & Stok")}
-                        className="flex h-10 items-center gap-2 rounded-lg border border-input bg-background px-3 text-sm font-semibold"
+                        className="hidden md:flex h-10 items-center gap-2 rounded-lg border border-input bg-background px-3 text-sm font-semibold"
                       >
                         <Boxes size={17} />
                         Produk & Stok
                       </button>
                     )}
-                    <button className="flex h-10 items-center gap-2 rounded-lg border border-[#d7dfd4] bg-white px-3 text-sm font-semibold">
+                    <button className="hidden md:flex h-10 items-center gap-2 rounded-lg border border-[#d7dfd4] bg-white px-3 text-sm font-semibold">
                       <HomeIcon size={17} />
                       Dine In
                     </button>
-                    <button className="flex h-10 items-center gap-2 rounded-lg bg-[#0369a1] px-4 text-sm font-semibold text-white">
+                    <button className="flex h-9 md:h-10 items-center gap-2 rounded-lg bg-[#0369a1] px-3 md:px-4 text-sm font-semibold text-white">
                       <ReceiptText size={17} />
-                      Shift {authUser.name.split(" ")[0]}
+                      <span className="hidden md:inline">Shift </span>
+                      {authUser.name.split(" ")[0]}
                     </button>
                     <button
                       onClick={logout}
-                      className="flex h-10 items-center gap-2 rounded-lg border border-input bg-background px-3 !text-[14px] font-semibold"
+                      className="flex h-9 md:h-10 items-center gap-2 rounded-lg border border-input bg-background px-3 !text-[14px] font-semibold"
                     >
-                      Keluar
+                      <LogOut size={16} className="md:hidden" />
+                      <span className="hidden md:inline">Keluar</span>
                     </button>
                   </>
                 ) : null}
@@ -4696,16 +4791,16 @@ export default function MavaposShell({
               <>
 	                {hasBasicAccess && (
 	                  <section
-	                    className="mt-6 overflow-hidden rounded-lg border border-[#dde3da] bg-white"
+	                    className="mt-4 md:mt-6 overflow-hidden rounded-lg border border-[#dde3da] bg-white"
 	                    aria-label="Carousel promo aktif"
 	                  >
 	                    <div
-	                      className="relative min-h-56 bg-cover bg-center transition-all duration-500"
+	                      className="relative min-h-40 md:min-h-56 bg-cover bg-center transition-all duration-500"
 	                      style={{
 	                        backgroundImage: `linear-gradient(90deg, rgba(3, 105, 161, 0.92), rgba(3, 105, 161, 0.5), rgba(3, 105, 161, 0.12)), url(${currentPromoImage})`,
 	                      }}
 	                    >
-	                      <div className="flex min-h-56 flex-col justify-between p-5 text-white">
+	                      <div className="flex min-h-40 md:min-h-56 flex-col justify-between p-4 md:p-5 text-white">
 	                        <div>
 	                          <div className="flex flex-wrap items-center justify-between gap-3">
 	                            <p className="text-sm font-semibold opacity-90">Promo aktif</p>
@@ -4731,10 +4826,10 @@ export default function MavaposShell({
 	                            )}
 	                          </div>
 	                          <div className="max-w-2xl">
-	                            <h2 className="mt-2 text-2xl font-semibold tracking-tight">
+	                            <h2 className="mt-1 md:mt-2 text-lg md:text-2xl font-semibold tracking-tight">
 	                              {currentPromo?.name ?? "Belum ada promo aktif"}
 	                            </h2>
-	                            <p className="mt-3 max-w-xl text-sm leading-6 text-white/90">
+	                            <p className="mt-2 md:mt-3 max-w-xl text-xs md:text-sm leading-5 md:leading-6 text-white/90">
 	                              {currentPromo
 	                                ? `${currentPromo.type} untuk ${currentPromo.target} senilai ${currentPromo.value}. Berlaku ${currentPromo.period}.`
 	                                : "Tambahkan promo agar tampil di carousel kasir dan bisa dipilih sebagai campaign outlet."}
@@ -4774,12 +4869,12 @@ export default function MavaposShell({
                         placeholder="Cari menu, produk, atau scan barcode"
                       />
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 overflow-x-auto scrollbar-none pb-1">
                       {(["Semua", ...categories] as const).map((item) => (
                         <button
                           key={item}
                           onClick={() => setCategory(item)}
-                          className={`h-10 rounded-lg px-4 text-sm font-semibold ${
+                          className={`shrink-0 h-10 rounded-full px-4 text-sm font-semibold whitespace-nowrap ${
                             category === item
                               ? "bg-[#0369a1] text-white"
                               : "border border-[#d7dfd4] bg-white text-[#4d5953]"
@@ -4791,12 +4886,12 @@ export default function MavaposShell({
                     </div>
                   </div>
 
-	                  <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-	                    {filteredProducts.map((product) => (
-	                      <button
-	                        key={product.id}
-	                        onClick={() => addToCart(product)}
-		                        className="relative h-[140px] min-h-[140px] overflow-hidden rounded-lg border border-[#dde3da] bg-[#fbfcfa] text-left transition hover:border-[#0369a1] hover:bg-[#f0f9ff]"
+                  <div className="mt-4 grid gap-3 grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+                    {filteredProducts.map((product) => (
+                      <button
+                        key={product.id}
+                        onClick={() => addToCart(product)}
+		                        className="relative aspect-[4/3] overflow-hidden rounded-xl border border-[#dde3da] bg-[#fbfcfa] text-left transition hover:border-[#0369a1] hover:bg-[#f0f9ff] active:scale-[0.98]"
 	                      >
 	                        {isDefaultProductImage(product.image) ? (
 	                          <div className="absolute inset-0 bg-[linear-gradient(135deg,#d7ecfb_0%,#f8fbfd_55%,#e0f2fe_100%)]">
@@ -4837,7 +4932,7 @@ export default function MavaposShell({
 	          </div>
 
 	          {activeMenu === "Kasir" && (
-	          <aside className="flex flex-col border-t bg-card p-5 xl:sticky xl:top-0 xl:h-screen xl:overflow-y-auto xl:border-l xl:border-t-0">
+	          <aside className="hidden xl:flex xl:flex-col xl:border-l bg-card p-5 xl:sticky xl:top-0 xl:h-screen xl:overflow-y-auto">
 	            <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-[#69756f]">Pesanan #MV-1048</p>
@@ -4978,6 +5073,121 @@ export default function MavaposShell({
 	            </div>
 	          </aside>
           )}
+
+          {/* ── Mobile: floating cart button ── */}
+          {activeMenu === "Kasir" && cart.length > 0 && (
+            <>
+              <div className="fixed bottom-0 left-0 right-0 z-20 border-t border-[#dde3da] bg-white px-4 py-3 shadow-lg xl:hidden">
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2 text-left">
+                    <div className="flex size-10 items-center justify-center rounded-full bg-[#e0f2fe] text-[#075985]">
+                      <ShoppingCart size={20} />
+                    </div>
+                    <div>
+                      <p className="text-[11px] font-medium text-[#69756f]">
+                        {cart.reduce((s, i) => s + i.qty, 0)} item
+                      </p>
+                      <p className="text-[15px] font-bold text-[#1f2623]">{formatCurrency(total)}</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setMobileCartOpen(true)}
+                    className="ml-auto flex h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-[#0369a1] text-[15px] font-bold text-white shadow-sm active:bg-[#075985] transition"
+                  >
+                    Buka Keranjang
+                    <ChevronRight size={20} />
+                  </button>
+                </div>
+              </div>
+
+              {/* ── Mobile: cart bottom sheet ── */}
+              {mobileCartOpen && (
+                <div
+                  className="fixed inset-0 z-30 flex flex-col bg-black/40 xl:hidden"
+                  onClick={() => setMobileCartOpen(false)}
+                >
+                  <div
+                    className="mt-auto flex max-h-[80dvh] flex-col rounded-t-2xl bg-white"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <div className="flex items-center justify-between border-b border-[#dde3da] px-5 py-4">
+                      <div>
+                        <p className="text-xs font-medium text-[#69756f]">Pesanan</p>
+                        <h2 className="text-lg font-semibold text-[#1f2623]">
+                          Keranjang ({cart.reduce((s, i) => s + i.qty, 0)})
+                        </h2>
+                      </div>
+                      <button
+                        onClick={() => setMobileCartOpen(false)}
+                        className="flex size-9 items-center justify-center rounded-full bg-[#f4f6f3]"
+                      >
+                        <X size={18} />
+                      </button>
+                    </div>
+
+                    <div className="flex-1 overflow-y-auto px-5 py-3">
+                      <div className="grid gap-2">
+                        {cart.map((item) => (
+                          <div
+                            key={item.id}
+                            className="flex items-center gap-3 rounded-xl border border-[#dde3da] px-4 py-3"
+                          >
+                            <div className="flex-1 min-w-0">
+                              <p className="truncate text-[14px] font-semibold text-[#1f2623]">{item.name}</p>
+                              <p className="text-[13px] text-[#69756f]">
+                                {formatCurrency(item.price)} / item
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => updateQty(item.id, -1)}
+                                className="flex size-8 items-center justify-center rounded-lg border border-[#d7dfd4] bg-white active:bg-[#f4f6f3]"
+                              >
+                                <Minus size={15} />
+                              </button>
+                              <span className="w-7 text-center text-[15px] font-bold">{item.qty}</span>
+                              <button
+                                onClick={() => updateQty(item.id, 1)}
+                                className="flex size-8 items-center justify-center rounded-lg border border-[#d7dfd4] bg-white active:bg-[#f4f6f3]"
+                              >
+                                <Plus size={15} />
+                              </button>
+                            </div>
+                            <button
+                              onClick={() => updateQty(item.id, -999)}
+                              className="flex size-8 items-center justify-center rounded-lg text-[#b5bfb9] active:text-destructive"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="border-t border-[#dde3da] px-5 py-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <span className="text-sm text-[#69756f]">Total</span>
+                        <span className="text-2xl font-bold text-[#1f2623]">{formatCurrency(total)}</span>
+                      </div>
+                      <button
+                        onClick={() => {
+                          setMobileCartOpen(false);
+                          openPaymentModal();
+                        }}
+                        className="flex h-13 w-full items-center justify-center gap-2 rounded-xl bg-[#0369a1] text-[15px] font-bold text-white shadow-sm active:bg-[#075985] transition"
+                      >
+                        <CreditCard size={20} />
+                        Lanjut Bayar
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+
+          {/* ── Mobile bottom spacing ── */}
+          {activeMenu === "Kasir" && cart.length > 0 && <div className="h-20 xl:hidden" />}
         </section>
       </div>
 
@@ -5133,7 +5343,27 @@ export default function MavaposShell({
 
           <DialogFooter>
             {paymentStep === "success" ? (
-              <Button onClick={finishPayment}>Transaksi baru</Button>
+              <div className="w-full space-y-3">
+                <div className="flex items-center gap-2 rounded-lg border border-[#dde3da] bg-[#fbfcfa] px-3 py-2 text-xs text-[#4d5953]">
+                  <Bluetooth size={15} className="text-[#0369a1]" />
+                  <span className="min-w-0 flex-1 truncate">
+                    {defaultPrinterName
+                      ? `Printer default: ${defaultPrinterName}`
+                      : "Belum ada printer default"}
+                  </span>
+                  <Button size="sm" variant="outline" onClick={saveDefaultPrinter}>
+                    Simpan Printer
+                  </Button>
+                </div>
+                <div className="flex gap-2">
+                  <Button className="flex-1" onClick={printStruk}>
+                    Cetak Struk
+                  </Button>
+                  <Button className="flex-1" variant="outline" onClick={finishPayment}>
+                    Transaksi baru
+                  </Button>
+                </div>
+              </div>
             ) : (
               <>
                 <Button variant="outline" onClick={() => setPaymentModal(false)}>

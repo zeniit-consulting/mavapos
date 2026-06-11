@@ -6,6 +6,7 @@ export type Product = {
   category: string;
   price: number;
   stock: number;
+  costPrice: number;
   tag: string;
   image: string;
 };
@@ -143,3 +144,63 @@ export type MenuLabel =
   | "Promo"
   | "Staf"
   | "Pengaturan";
+
+export type Customer = {
+  id: EntityId;
+  name: string;
+  phone: string;
+  email: string;
+  points: number;
+};
+
+export type CustomerForm = {
+  name: string;
+  phone: string;
+  email: string;
+};
+
+export type IngredientMovement = {
+  id: EntityId;
+  ingredientId: EntityId;
+  ingredientName: string;
+  qtyChange: number;
+  previousStock: number;
+  nextStock: number;
+  note: string;
+  createdAt: string;
+};
+
+export type Supplier = {
+  id: EntityId;
+  name: string;
+  phone: string;
+  email: string;
+  address: string;
+  createdAt: string;
+};
+
+export type SupplierForm = {
+  name: string;
+  phone: string;
+  email: string;
+  address: string;
+};
+
+export type CashierShift = {
+  id: EntityId;
+  cashierId: EntityId;
+  openedAt: string;
+  closedAt: string | null;
+  startingCash: number;
+  expectedCash: number;
+  actualCash: number | null;
+  difference: number | null;
+  status: "Buka" | "Tutup";
+  note: string;
+};
+
+export type CashierShiftForm = {
+  startingCash: number;
+  actualCash?: number;
+  note?: string;
+};
